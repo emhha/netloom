@@ -1,0 +1,9 @@
+/.agents/
+/.aws/
+/.codex/
+/.git-publish/
+/netrt-publish.bundle
+__pycache__/
+*.py[cod]
+*.test
+/coverage.out

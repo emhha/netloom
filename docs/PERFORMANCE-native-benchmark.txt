@@ -1,0 +1,60 @@
+goos: linux
+goarch: amd64
+pkg: netrt.local/netrt/fingerprint
+cpu: AMD Ryzen 7 6800H with Radeon Graphics         
+BenchmarkNativeMatchers/EHole/4KiB/linear-4  	     325	    356282 ns/op	  11.50 MB/s	   12923 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/4KiB/linear-4  	     343	    353290 ns/op	  11.59 MB/s	   12921 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/4KiB/linear-4  	     285	    409273 ns/op	  10.01 MB/s	   12921 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/4KiB/indexed-4 	    4293	     33729 ns/op	 121.44 MB/s	    9864 B/op	      19 allocs/op
+BenchmarkNativeMatchers/EHole/4KiB/indexed-4 	    5287	     37112 ns/op	 110.37 MB/s	    9864 B/op	      19 allocs/op
+BenchmarkNativeMatchers/EHole/4KiB/indexed-4 	    5415	     33213 ns/op	 123.33 MB/s	    9864 B/op	      19 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/4KiB/linear-4  	       3	  38137601 ns/op	   0.11 MB/s	17393149 B/op	   21712 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/4KiB/linear-4  	       3	  39892816 ns/op	   0.10 MB/s	17393322 B/op	   21713 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/4KiB/linear-4  	       3	  43281130 ns/op	   0.09 MB/s	17418338 B/op	   21716 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/4KiB/indexed-4 	    1299	     87661 ns/op	  46.73 MB/s	   12384 B/op	      15 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/4KiB/indexed-4 	    1533	     78215 ns/op	  52.37 MB/s	   12384 B/op	      15 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/4KiB/indexed-4 	    1610	     73016 ns/op	  56.10 MB/s	   12384 B/op	      15 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB/linear-4          	      25	   4646534 ns/op	  14.10 MB/s	   74387 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB/linear-4          	      24	   4540641 ns/op	  14.43 MB/s	   74389 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB/linear-4          	      24	   4780808 ns/op	  13.71 MB/s	   74397 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB/indexed-4         	     400	    268942 ns/op	 243.68 MB/s	   71308 B/op	      19 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB/indexed-4         	     475	    246178 ns/op	 266.21 MB/s	   71309 B/op	      19 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB/indexed-4         	     478	    261487 ns/op	 250.63 MB/s	   71309 B/op	      19 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB/linear-4 	       1	 507078488 ns/op	   0.13 MB/s	252998744 B/op	   21787 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB/linear-4 	       1	 504858703 ns/op	   0.13 MB/s	252980336 B/op	   21747 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB/linear-4 	       1	 514156939 ns/op	   0.13 MB/s	252986504 B/op	   21761 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB/indexed-4         	     141	    876225 ns/op	  74.79 MB/s	   73824 B/op	      15 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB/indexed-4         	     141	    849630 ns/op	  77.13 MB/s	   73824 B/op	      15 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB/indexed-4         	     153	    796363 ns/op	  82.29 MB/s	   73824 B/op	      15 allocs/op
+BenchmarkNativeMatchers/EHole/256KiB/linear-4                  	       6	  17366745 ns/op	  15.09 MB/s	  271084 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/256KiB/linear-4                  	       6	  18454712 ns/op	  14.20 MB/s	  271084 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/256KiB/linear-4                  	       6	  18061874 ns/op	  14.51 MB/s	  271084 B/op	     218 allocs/op
+BenchmarkNativeMatchers/EHole/256KiB/indexed-4                 	     123	    953331 ns/op	 274.98 MB/s	  267929 B/op	      19 allocs/op
+BenchmarkNativeMatchers/EHole/256KiB/indexed-4                 	     129	    940793 ns/op	 278.64 MB/s	  267929 B/op	      19 allocs/op
+BenchmarkNativeMatchers/EHole/256KiB/indexed-4                 	     129	    935361 ns/op	 280.26 MB/s	  267926 B/op	      19 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/256KiB/linear-4         	       1	2551557240 ns/op	   0.10 MB/s	1007142584 B/op	   22131 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/256KiB/linear-4         	       1	2276332722 ns/op	   0.12 MB/s	1007161208 B/op	   22161 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/256KiB/linear-4         	       1	2708038930 ns/op	   0.10 MB/s	1007125360 B/op	   22108 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/256KiB/indexed-4        	      32	   3569851 ns/op	  73.43 MB/s	  270435 B/op	      15 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/256KiB/indexed-4        	      39	   3650329 ns/op	  71.81 MB/s	  270432 B/op	      15 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/256KiB/indexed-4        	      32	   3790578 ns/op	  69.16 MB/s	  270435 B/op	      15 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB-mixed-hit/linear-4         	      22	   5250578 ns/op	  12.48 MB/s	  144456 B/op	     226 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB-mixed-hit/linear-4         	      21	   4942410 ns/op	  13.26 MB/s	  144456 B/op	     226 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB-mixed-hit/linear-4         	      22	   5308484 ns/op	  12.35 MB/s	  144459 B/op	     226 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB-mixed-hit/indexed-4        	     243	    519020 ns/op	 126.27 MB/s	  141581 B/op	      29 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB-mixed-hit/indexed-4        	     312	    359685 ns/op	 182.20 MB/s	  141581 B/op	      29 allocs/op
+BenchmarkNativeMatchers/EHole/64KiB-mixed-hit/indexed-4        	     306	    386981 ns/op	 169.35 MB/s	  141581 B/op	      29 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB-mixed-hit/linear-4         	       1	 963623189 ns/op	   0.07 MB/s	438922600 B/op	   25253 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB-mixed-hit/linear-4         	       1	 998083292 ns/op	   0.07 MB/s	438872704 B/op	   25126 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB-mixed-hit/linear-4         	       1	1208834148 ns/op	   0.05 MB/s	438891896 B/op	   25177 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB-mixed-hit/indexed-4        	      99	   1406835 ns/op	  46.58 MB/s	  288247 B/op	      41 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB-mixed-hit/indexed-4        	      94	   1182868 ns/op	  55.40 MB/s	  286019 B/op	      40 allocs/op
+BenchmarkNativeMatchers/FingerprintHub/64KiB-mixed-hit/indexed-4        	      90	   1660548 ns/op	  39.47 MB/s	  288449 B/op	      41 allocs/op
+BenchmarkNativeMatcherBuild/EHole-4                                     	       5	  22140093 ns/op	 6201104 B/op	   26579 allocs/op
+BenchmarkNativeMatcherBuild/EHole-4                                     	       6	  20403053 ns/op	 6201064 B/op	   26578 allocs/op
+BenchmarkNativeMatcherBuild/EHole-4                                     	       9	  21603337 ns/op	 6201016 B/op	   26578 allocs/op
+BenchmarkNativeMatcherBuild/FingerprintHub-4                            	       1	 251042368 ns/op	83802120 B/op	  322964 allocs/op
+BenchmarkNativeMatcherBuild/FingerprintHub-4                            	       1	 295335865 ns/op	83801896 B/op	  322962 allocs/op
+BenchmarkNativeMatcherBuild/FingerprintHub-4                            	       1	 268963664 ns/op	83802064 B/op	  322959 allocs/op
+PASS
+ok  	netrt.local/netrt/fingerprint	23.150s

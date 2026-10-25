@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/projectdiscovery/wappalyzergo.git",
+  "commit": "efb75ceb931f003b6c224d414fb0cba3116c0b08",
+  "technology_count": 7540,
+  "files": {
+    "wappalyzer.json": {
+      "upstream_path": "fingerprints_data.json",
+      "sha256": "5c46a3d8e91a3e711cd72679ea5b3faccb48d3fbf50f68fcbdcb9342bfc36aea"
+    },
+    "LICENSE.wappalyzergo.md": {
+      "upstream_path": "LICENSE.md",
+      "sha256": "cbcdaab87df3175107aa28915bd253cebdd618a49c9ac5d6c669c0b1cbebcacb"
+    },
+    "README.wappalyzergo.md": {
+      "upstream_path": "README.md",
+      "sha256": "407d7d10ea772845a371c3d7b9916b172035228f1cfe40180e1615f99f74b134"
+    }
+  },
+  "import_method": "Exported from existing local Git commit objects; remote download failed because network access was unavailable."
+}

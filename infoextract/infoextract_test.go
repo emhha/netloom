@@ -1,0 +1,255 @@
+package infoextract
+
+import (
+	"net/http"
+	"testing"
+
+	"netrt.local/netrt/httpdata"
+)
+
+// TestTwoPhaseAC verifies that Phase 1 (AC) correctly gates Phase 2 (regex).
+func TestTwoPhaseAC(t *testing.T) {
+	e := New()
+
+	// Body that contains the AWS trigger but no actual key.
+	body := []byte("some content with AKIA prefix but not a real key")
+	findings := e.ExtractWithContentType(body, nil, "text/html")
+
+	// aws_access_key requires AKIA + exactly 16 uppercase alphanum chars.
+	// "AKIA prefix" does not match the full pattern, so no finding expected.
+	for _, f := range findings {
+		if f.RuleName == "aws_access_key" {
+			t.Errorf("unexpected aws_access_key finding: %+v", f)
+		}
+	}
+}
+
+// TestFallbackRulesAlwaysRun verifies that rules with no Triggers run
+// unconditionally even without an AC hit.
+func TestFallbackRulesAlwaysRun(t *testing.T) {
+	e := New()
+
+	body := []byte("contact us at admin@example.com for more info")
+	findings := e.ExtractWithContentType(body, nil, "text/html")
+
+	found := false
+	for _, f := range findings {
+		if f.RuleName == "email" && f.Value == "admin@example.com" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected email fallback rule to fire")
+	}
+}
+
+// TestAWSKey checks that a real AWS access key is detected.
+func TestAWSKey(t *testing.T) {
+	e := New()
+
+	body := []byte("key=AKIAIOSFODNN7EXAMPLE other stuff")
+	findings := e.ExtractWithContentType(body, nil, "text/html")
+
+	found := false
+	for _, f := range findings {
+		if f.RuleName == "aws_access_key" {
+			found = true
+			if f.Sensitivity != "high" {
+				t.Errorf("expected high sensitivity, got %q", f.Sensitivity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected aws_access_key finding")
+	}
+}
+
+// TestBinaryContentTypeSkipped verifies image/* returns nil.
+func TestBinaryContentTypeSkipped(t *testing.T) {
+	e := New()
+	body := []byte("AKIAIOSFODNN7EXAMPLE")
+	findings := e.ExtractWithContentType(body, nil, "image/png")
+	if findings != nil {
+		t.Errorf("expected nil for binary content-type, got %v", findings)
+	}
+}
+
+// TestHeaderScan verifies header-scope rules fire on serialized headers.
+func TestHeaderScan(t *testing.T) {
+	e := New()
+
+	// Add a header-scoped rule for testing.
+	err := e.AddRule(Rule{
+		Name:        "test_header_bearer",
+		Pattern:     `Bearer\s+([A-Za-z0-9._\-]+)`,
+		Color:       "red",
+		Scope:       "header",
+		Sensitivity: "high",
+		Triggers:    []string{"Bearer "},
+	})
+	if err != nil {
+		t.Fatalf("AddRule: %v", err)
+	}
+
+	h := http.Header{"Authorization": []string{"Bearer mytoken123"}}
+	findings := e.ExtractWithContentType(nil, h, "text/html")
+
+	found := false
+	for _, f := range findings {
+		if f.RuleName == "test_header_bearer" && f.Scope == "header" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected bearer token found in header")
+	}
+}
+
+// TestSpecialCategoryJSOnly verifies linkfinder only runs for JS/JSON content.
+func TestSpecialCategoryJSOnly(t *testing.T) {
+	e := New()
+
+	jsBody := []byte(`"/api/v1/users" some js content`)
+
+	// Should fire for JS content-type.
+	jsFindings := e.ExtractWithContentType(jsBody, nil, "application/javascript")
+	foundInJS := false
+	for _, f := range jsFindings {
+		if f.RuleName == "linkfinder" {
+			foundInJS = true
+		}
+	}
+	if !foundInJS {
+		t.Error("expected linkfinder to fire for JS content-type")
+	}
+
+	// Should NOT fire for HTML content-type.
+	htmlFindings := e.ExtractWithContentType(jsBody, nil, "text/html")
+	for _, f := range htmlFindings {
+		if f.RuleName == "linkfinder" {
+			t.Error("linkfinder should not fire for HTML content-type")
+		}
+	}
+}
+
+// TestHeadOnlyJS verifies that JS bodies larger than 100KB are truncated.
+func TestHeadOnlyJS(t *testing.T) {
+	e := New()
+
+	// Build a 200KB body: first 1KB has a valid JWT, rest is junk.
+	jwtToken := []byte(`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c`)
+	body := make([]byte, 200*1024)
+	copy(body, jwtToken)
+
+	findings := e.ExtractWithContentType(body, nil, "application/javascript")
+	found := false
+	for _, f := range findings {
+		if f.RuleName == "jwt_token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected JWT finding in first 100KB of JS body")
+	}
+}
+
+// TestExtractInterface verifies the response extractor contract.
+func TestExtractInterface(t *testing.T) {
+	var _ interface {
+		Extract(*httpdata.Response) ([]httpdata.Artifact, error)
+	} = (*InfoExtractor)(nil)
+}
+
+// TestExtractResp verifies Extract converts Findings to Artifacts.
+func TestExtractResp(t *testing.T) {
+	e := New()
+	resp := &httpdata.Response{
+		Body:        []byte("key=AKIAIOSFODNN7EXAMPLE"),
+		Header:      nil,
+		ContentType: "text/html",
+	}
+	arts, err := e.Extract(resp)
+	if err != nil {
+		t.Fatalf("Extract error: %v", err)
+	}
+	found := false
+	for _, a := range arts {
+		if a.Type == "aws_access_key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected aws_access_key artifact from Extract")
+	}
+}
+
+// TestAddRuleSameNameOverwrite verifies same-name rules are deduplicated.
+func TestAddRuleSameNameOverwrite(t *testing.T) {
+	e := New()
+
+	// Add custom rule with same name as built-in; it uses a different pattern.
+	err := e.AddRule(Rule{
+		Name:        "email",
+		Pattern:     `CUSTOM_([a-z]+)`,
+		Color:       "green",
+		Scope:       "body",
+		Sensitivity: "high",
+		Triggers:    []string{"CUSTOM_"},
+	})
+	if err != nil {
+		t.Fatalf("AddRule: %v", err)
+	}
+
+	// Count how many "email" rules exist (should be exactly 1).
+	e.mu.RLock()
+	count := 0
+	for _, cr := range e.rules {
+		if cr.Name == "email" {
+			count++
+		}
+	}
+	e.mu.RUnlock()
+
+	if count != 1 {
+		t.Errorf("expected exactly 1 rule named 'email', got %d", count)
+	}
+}
+
+// TestAddRuleInvalidPattern verifies AddRule returns error without mutation.
+func TestAddRuleInvalidPattern(t *testing.T) {
+	e := New()
+	countBefore := func() int {
+		e.mu.RLock()
+		defer e.mu.RUnlock()
+		return len(e.rules)
+	}
+	before := countBefore()
+
+	err := e.AddRule(Rule{
+		Name:    "bad_rule",
+		Pattern: `[invalid(`,
+	})
+	if err == nil {
+		t.Error("expected error for invalid pattern")
+	}
+	if countBefore() != before {
+		t.Error("rule count changed on error")
+	}
+}
+
+// TestInternalIPFallback checks that internal IPs are detected without triggers.
+func TestInternalIPFallback(t *testing.T) {
+	e := New()
+	body := []byte("connect to 192.168.1.100 for service")
+	findings := e.ExtractWithContentType(body, nil, "text/html")
+
+	found := false
+	for _, f := range findings {
+		if f.RuleName == "internal_ip" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected internal_ip finding")
+	}
+}

@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/jjf012/webfinger.git",
+  "commit": "fb89e848a7b0f2536eaf6ea95719f1b5b727fd10",
+  "files": {
+    "finger.yaml": {
+      "upstream_path": "finger.yaml",
+      "sha256": "31b9b979ff6dd68d2a787b8a9bc818d211478ba3040e9526c156365727243344",
+      "git_blob": "0189bf44d7da08edd0f29cf1592edc0bc77f94e0"
+    },
+    "README.upstream.md": {
+      "upstream_path": "README.md",
+      "sha256": "2f7f55733f1f06151f9ab8eed69540ee956ad46c5d4b0a76a2725cdb5a029b20",
+      "git_blob": "5eae5ab6a88dd957932aa3d88526bb147ef3b541"
+    }
+  },
+  "license_note": "No LICENSE or license declaration was present in this source checkout. Original README retained; redistribution terms must be confirmed before publishing."
+}

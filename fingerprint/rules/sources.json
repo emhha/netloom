@@ -1,0 +1,6 @@
+{
+  "webfinger": {"enabled": false, "file": "finger.yaml"},
+  "ehole": {"enabled": true, "file": "ehole.json"},
+  "fingerprinthub": {"enabled": true, "file": "fingerprinthub_v4.json"},
+  "wappalyzer": {"enabled": true, "file": "wappalyzer.json"}
+}

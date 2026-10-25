@@ -1,0 +1,18 @@
+{
+  "ehole": {
+    "file": "ehole.json",
+    "source_url": "https://github.com/EdgeSecurityTeam/EHole/blob/main/finger.json",
+    "sha256": "0a3a0943cc0965eb8cac10727764088dffa83382bdf1e45117e5cac3bc169ba3",
+    "rule_count": 958,
+    "import_method": "File downloaded and supplied by the user; preserved byte-for-byte.",
+    "commit": null
+  },
+  "fingerprinthub": {
+    "file": "fingerprinthub_v4.json",
+    "source_url": "https://github.com/0x727/FingerprintHub/blob/main/web_fingerprint_v4.json",
+    "sha256": "34065cf1af664604fe42a93cd73266f613babad5e7565cb338dbd6c744df5220",
+    "rule_count": 3425,
+    "import_method": "File downloaded and supplied by the user; preserved byte-for-byte.",
+    "commit": null
+  }
+}
