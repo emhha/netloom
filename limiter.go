@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -30,12 +30,12 @@ func newRateLimiter(perSecond, perMinute int) *rateLimiter {
 func (rl *rateLimiter) wait(ctx context.Context) error {
 	if rl.perSecond != nil {
 		if err := rl.perSecond.wait(ctx); err != nil {
-			return fmt.Errorf("netrt.rateLimiter: %w", err)
+			return fmt.Errorf("netloom.rateLimiter: %w", err)
 		}
 	}
 	if rl.perMinute != nil {
 		if err := rl.perMinute.wait(ctx); err != nil {
-			return fmt.Errorf("netrt.rateLimiter: %w", err)
+			return fmt.Errorf("netloom.rateLimiter: %w", err)
 		}
 	}
 	return nil

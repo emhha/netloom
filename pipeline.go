@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -58,7 +58,7 @@ func (c *Context) Next() error {
 		h := c.handlers[c.index]
 		current := c.index
 		if err := h(c); err != nil {
-			return fmt.Errorf("netrt.Context.Next[%d]: %w", current, err)
+			return fmt.Errorf("netloom.Context.Next[%d]: %w", current, err)
 		}
 		if c.aborted {
 			return nil
@@ -92,7 +92,7 @@ func (c *Context) TryEmit(t Task) bool {
 	return false
 }
 
-var ErrQueueFull = fmt.Errorf("netrt: task queue is full or unavailable")
+var ErrQueueFull = fmt.Errorf("netloom: task queue is full or unavailable")
 
 // Abort stops Pipeline execution for the current request without producing an
 // error. Use it for "not interested" decisions (e.g. a Matcher miss).
@@ -118,7 +118,7 @@ func (c *Context) run() error {
 func AsMutator(m Mutator) Handler {
 	return func(c *Context) error {
 		if err := m.Mutate(c.Req); err != nil {
-			return fmt.Errorf("netrt.AsMutator: %w", err)
+			return fmt.Errorf("netloom.AsMutator: %w", err)
 		}
 		return c.Next()
 	}
@@ -136,7 +136,7 @@ func AsExtractor(e Extractor) Handler {
 		}
 		arts, err := e.Extract(c.Resp)
 		if err != nil {
-			return fmt.Errorf("netrt.AsExtractor[%s]: %w", e.Name(), err)
+			return fmt.Errorf("netloom.AsExtractor[%s]: %w", e.Name(), err)
 		}
 		c.Artifacts = append(c.Artifacts, arts...)
 		return nil

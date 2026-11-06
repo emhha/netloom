@@ -16,7 +16,7 @@ Go 1.26.3、linux/amd64，固定 -cpu=4。使用仓库的完整 958 条 EHole �
 正文长度精确为 4/64/256 KiB；无命中样本为重复的普通 HTML 片段。64 KiB 混合命中样本包括实际关键词组合、HTML title、nginx 响应头和已捕获图标哈希。每个子项运行三次，表中取各指标中位数。较慢的旧实现每次可能仅有一个迭代，数字是本机样本观测，不是统计显著性或真实网站吞吐量承诺。
 
 ```sh
-GOCACHE=/tmp/netrt-go-cache GOPROXY=off go test ./fingerprint \
+GOCACHE=/tmp/netloom-go-cache GOPROXY=off go test ./fingerprint \
   -run '^$' -bench 'BenchmarkNativeMatchers|BenchmarkNativeMatcherBuild' \
   -benchmem -benchtime=100ms -count=3 -cpu=4
 ```
@@ -53,4 +53,4 @@ GOCACHE=/tmp/netrt-go-cache GOPROXY=off go test ./fingerprint \
 
 候选较密集、正则没有可提取的必需字面量、或文本包含大量匹配时，加速比会变化；索引不会省略最终条件判断。默认启用仍为 EHole/FingerprintHub/Wappalyzer，webfinger 禁用，公共配置与分析接口不变。
 
-原始测量输出见 [PERFORMANCE-native-benchmark.txt](PERFORMANCE-native-benchmark.txt)。
+原始测量输出见 [PERFORMANCE-native-benchmark.txt](PERFORMANCE-native-benchmark.txt)。输出保留测量时的包标识，不代表当前导入路径；未为重命名而改写原始测量数据。

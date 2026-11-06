@@ -198,7 +198,12 @@
         "service/request_options_test.go": "b91cfcbeda6d769662f023e75a655151ac798c65f17dfa11532605e13529d664",
         "service/request_options.go": "0b723e0622b11e9708f326e0827a32dd31b03d0ed4b6b3dff20c43b14be08a3c",
         "service/mitm_service.go": "b5bb71f6e34ce029c02dbe69e27154b32a22ce5e93524c7464e41db44b3d9169",
-        "mcp/server.go": "a24c00407a3f2afb1f4528267fc59be225c970b10dba36ddbc3d2ce376ad6794"
+        "mcp/server.go": "a24c00407a3f2afb1f4528267fc59be225c970b10dba36ddbc3d2ce376ad6794",
+        "geoip/trie.go": "2de9873b97ab995fd4faf50d34ed6ba4685cd190ca77200bdb434296949782b3",
+        "geoip/geoip.go": "aa16f774fca6e20c8fc092c6c0b98ef9be332fcd1990cf371a26fadce84f7bed",
+        "geoip/geoip_test.go": "b9aed612ee30c3adf030d8d00e85a428b7c608e23a90df52e0f6e0edf210c7ce",
+        "geoip/cdn.go": "25b73315a5c8b967ab053962e96a0e4c28023c546293a96a111806b39d8e38ed",
+        "geoip/download.go": "eb6f94cf1688275bce3e4685a304ca651a475eb13371d7818b9bd9769cb253c1"
       }
     }
   ]

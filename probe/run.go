@@ -5,8 +5,8 @@ import (
 	"crypto/md5" //nolint:gosec // md5 used for body dedup hash only
 	"encoding/hex"
 	"fmt"
+	"github.com/emhha/netloom"
 	"net/url"
-	"netrt.local/netrt"
 	"strings"
 	"sync"
 
@@ -17,7 +17,7 @@ import (
 //
 // Each element of targets is a raw URL (e.g. "https://example.com",
 // "http://1.2.3.4:8080"). Scope authorization must be performed by the caller
-// before Run is invoked. netrt Transport permanently rejects loopback and
+// before Run is invoked. netloom Transport permanently rejects loopback and
 // link-local addresses at the dial layer.
 //
 // The returned channel is closed when all targets have been processed or ctx
@@ -29,7 +29,7 @@ func Run(ctx context.Context, targets []string, cfg *Config) <-chan *Result {
 	}
 
 	ratePerSecond, threads := cfg.rateParams()
-	engCfg := netrt.Config{
+	engCfg := netloom.Config{
 		Threads:       threads,
 		RatePerSecond: ratePerSecond,
 		Timeout:       cfg.timeout(),
@@ -38,7 +38,7 @@ func Run(ctx context.Context, targets []string, cfg *Config) <-chan *Result {
 		CookieJar:     cfg.EnableCookies,
 	}
 
-	eng, err := netrt.New(engCfg)
+	eng, err := netloom.New(engCfg)
 	if err != nil {
 		// Engine construction should never fail with standard config; surface as
 		// an error result per target and close immediately.
@@ -66,7 +66,7 @@ func Run(ctx context.Context, targets []string, cfg *Config) <-chan *Result {
 
 // runProbe drives the fan-out across targets using a bounded worker pool.
 // Each target runs the HTTPS→HTTP fallback sequence independently.
-func runProbe(ctx context.Context, targets []string, cfg *Config, eng *netrt.Engine, out chan<- *Result) {
+func runProbe(ctx context.Context, targets []string, cfg *Config, eng *netloom.Engine, out chan<- *Result) {
 	_, threads := cfg.rateParams()
 	if threads <= 0 {
 		threads = 50
@@ -109,8 +109,8 @@ func probeTarget(
 	ctx context.Context,
 	target string,
 	cfg *Config,
-	eng *netrt.Engine,
-	pipeline []netrt.Handler,
+	eng *netloom.Engine,
+	pipeline []netloom.Handler,
 	detector *Soft404Detector,
 ) *Result {
 	// Normalise: if no scheme, prepend https.
@@ -156,8 +156,8 @@ func probeHTTPS(
 	ctx context.Context,
 	target, rawURL string,
 	cfg *Config,
-	eng *netrt.Engine,
-	pipeline []netrt.Handler,
+	eng *netloom.Engine,
+	pipeline []netloom.Handler,
 	detector *Soft404Detector,
 ) *Result {
 	return sendWithRedirects(ctx, target, rawURL, cfg, eng, pipeline, detector)
@@ -168,8 +168,8 @@ func probeHTTP(
 	ctx context.Context,
 	target, rawURL string,
 	cfg *Config,
-	eng *netrt.Engine,
-	pipeline []netrt.Handler,
+	eng *netloom.Engine,
+	pipeline []netloom.Handler,
 	detector *Soft404Detector,
 ) *Result {
 	return sendWithRedirects(ctx, target, rawURL, cfg, eng, pipeline, detector)
@@ -181,12 +181,12 @@ func sendWithRedirects(
 	ctx context.Context,
 	target, rawURL string,
 	cfg *Config,
-	eng *netrt.Engine,
-	pipeline []netrt.Handler,
+	eng *netloom.Engine,
+	pipeline []netloom.Handler,
 	detector *Soft404Detector,
 ) *Result {
 	req := buildRequest(rawURL, cfg)
-	exchange, err := netrt.Do(ctx, eng, req, netrt.RedirectPolicy{Follow: cfg.FollowRedirect, MaxHops: cfg.MaxRedirects, ValidateURL: cfg.ValidateURL})
+	exchange, err := netloom.Do(ctx, eng, req, netloom.RedirectPolicy{Follow: cfg.FollowRedirect, MaxHops: cfg.MaxRedirects, ValidateURL: cfg.ValidateURL})
 	if err != nil {
 		failed := &Result{Target: target, URL: rawURL, TargetKey: buildTargetKey(rawURL), Error: fmt.Sprintf("probe: %v", err)}
 		if exchange != nil {
@@ -203,7 +203,7 @@ func sendWithRedirects(
 		return failed
 	}
 	req, resp := exchange.Request, exchange.Response
-	pipelineCtx := netrt.NewContext(ctx, req, pipeline, nil)
+	pipelineCtx := netloom.NewContext(ctx, req, pipeline, nil)
 	pipelineCtx.Resp = resp
 	if err := pipelineCtx.Next(); err != nil {
 		return &Result{Target: target, URL: req.URL, TargetKey: buildTargetKey(req.URL), Error: fmt.Sprintf("probe: analyze response: %v", err)}
@@ -222,13 +222,13 @@ func sendWithRedirects(
 		TLS: resp.TLS, Fingerprints: fingerprints, IsSoft404: detector.Check(resp.StatusCode, resp.BodyHash), Redirects: exchange.Hops}
 }
 
-// buildRequest constructs a netrt.Request from the probe URL and config.
-func buildRequest(rawURL string, cfg *Config) *netrt.Request {
-	req := &netrt.Request{
+// buildRequest constructs a netloom.Request from the probe URL and config.
+func buildRequest(rawURL string, cfg *Config) *netloom.Request {
+	req := &netloom.Request{
 		Method:    "GET",
 		URL:       rawURL,
 		Timeout:   cfg.timeout(),
-		Profile:   netrt.ProfileByName(cfg.TLSProfile),
+		Profile:   netloom.ProfileByName(cfg.TLSProfile),
 		Proxy:     cfg.ProxyURL,
 		VerifyTLS: !cfg.SkipVerify,
 	}
@@ -248,7 +248,7 @@ func isRedirect(code int) bool {
 
 // resolveRedirect resolves the Location header value against the current URL.
 func resolveRedirect(current, location string) (string, error) {
-	return netrt.ResolveRedirect(current, location)
+	return netloom.ResolveRedirect(current, location)
 }
 
 // normaliseURL ensures rawURL has a scheme. Bare hostnames / IPs get "https://".

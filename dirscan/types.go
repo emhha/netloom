@@ -1,7 +1,7 @@
 // Package dirscan provides a high-performance directory scanner built on top of
-// the netrt engine. It replicates dirsearch's core logic — wildcard/soft-404
+// the netloom engine. It replicates dirsearch's core logic — wildcard/soft-404
 // auto-calibration, dual-queue (_items/_extra), crawl, and recursive directory
-// scanning — while running entirely on the netrt Scheduler for concurrency,
+// scanning — while running entirely on the netloom Scheduler for concurrency,
 // rate-limiting, and SSRF protection.
 //
 // Zero business dependencies: no scope validation, no DB access, no audit log.
@@ -66,7 +66,7 @@ type Config struct {
 	Wordlist []string
 	// Extensions appended during extension-fuzz (default ["php","html","asp","jsp"]).
 	Extensions []string
-	// Threads controls netrt concurrency (default 30; SmartSkip lowers to 20).
+	// Threads controls netloom concurrency (default 30; SmartSkip lowers to 20).
 	Threads int
 	// Timeout is the per-request deadline (default 10s).
 	Timeout time.Duration
@@ -75,7 +75,7 @@ type Config struct {
 	// Headers are extra headers sent on every request.
 	Headers map[string]string
 	// TLSProfile selects the browser TLS fingerprint (e.g. "chrome_131"); empty
-	// uses the netrt default profile. Passed to netrt.ProfileByName.
+	// uses the netloom default profile. Passed to netloom.ProfileByName.
 	TLSProfile string
 
 	// --- Preset & wordlist selection ---

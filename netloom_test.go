@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -590,7 +590,7 @@ func TestPerHostCookiesDisabledDefault(t *testing.T) {
 }
 
 // TestPerHostCookiesViaEngine verifies the end-to-end wiring: enabling
-// CookieJar in netrt.Config turns the shared per-host jar on for Engine.Send,
+// CookieJar in netloom.Config turns the shared per-host jar on for Engine.Send,
 // and leaving it off keeps the engine stateless.
 func TestPerHostCookiesViaEngine(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

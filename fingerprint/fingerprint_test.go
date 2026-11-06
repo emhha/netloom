@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 
 	"net/http"
 )

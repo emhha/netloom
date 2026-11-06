@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -82,7 +82,7 @@ func (e *Engine) Run(ctx context.Context, seeds []Task) (<-chan *Result, error) 
 	if e.sch != nil {
 		e.mu.Unlock()
 		release()
-		return nil, fmt.Errorf("netrt.Engine.Run: %w", ErrEngineBusy)
+		return nil, fmt.Errorf("netloom.Engine.Run: %w", ErrEngineBusy)
 	}
 	sch := newScheduler(e.cfg, e.tlsT, e.rawT, e.logger)
 	sch.onDone = func() {
@@ -147,7 +147,7 @@ func (e *Engine) Schedule(t Task) {
 // without requiring an active Run. Response analysis is supplied by callers.
 func (e *Engine) Send(ctx context.Context, req *Request) (*Response, error) {
 	if req == nil {
-		return nil, fmt.Errorf("netrt.Engine.Send: %w", ErrNilRequest)
+		return nil, fmt.Errorf("netloom.Engine.Send: %w", ErrNilRequest)
 	}
 	ctx, finish, err := e.begin(ctx)
 	if err != nil {
@@ -166,7 +166,7 @@ func (e *Engine) Send(ctx context.Context, req *Request) (*Response, error) {
 	tmp := newScheduler(cfg, e.tlsT, e.rawT, e.logger)
 	resp, err := tmp.sendWithRetry(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("netrt.Engine.Send: %w", err)
+		return nil, fmt.Errorf("netloom.Engine.Send: %w", err)
 	}
 	return resp, nil
 }
@@ -202,16 +202,16 @@ func (e *Engine) acquireSend(ctx context.Context, req *Request) (func(), error) 
 
 var (
 	// ErrEngineBusy is returned by Run when another Run is already in flight.
-	ErrEngineBusy = fmt.Errorf("netrt: engine busy")
+	ErrEngineBusy = fmt.Errorf("netloom: engine busy")
 	// ErrNilRequest is returned when a nil *Request reaches Send.
-	ErrNilRequest = fmt.Errorf("netrt: nil request")
+	ErrNilRequest = fmt.Errorf("netloom: nil request")
 )
 
 // compile-time assertion that Engine satisfies Runtime.
 var _ Runtime = (*Engine)(nil)
 
 // ErrEngineClosed is returned when work is submitted after Close.
-var ErrEngineClosed = fmt.Errorf("netrt: engine closed")
+var ErrEngineClosed = fmt.Errorf("netloom: engine closed")
 
 // begin links caller cancellation to the Engine lifetime and registers work.
 func (e *Engine) begin(ctx context.Context) (context.Context, func(), error) {

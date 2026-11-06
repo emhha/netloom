@@ -9,7 +9,8 @@ import (
 )
 
 // TestPythonCookieServerE2E drives probe.Run (the real probe entry point)
-// against the Python virtual-host cookie server in tmp_cookiejar_test/server.py.
+// against a caller-provided virtual-host cookie service; see docs/testing.md
+// for external service prerequisites.
 //
 // The server must be reachable on the private IP that the /etc/hosts entries
 // below resolve to. Add to /etc/hosts:
@@ -17,7 +18,7 @@ import (
 //	<private-ip> cookie.test other.test
 //
 // where <private-ip> is this box's RFC1918 address (e.g. 192.168.81.167).
-// netrt's dial guard rejects loopback/link-local but permits RFC1918, so probe
+// netloom's dial guard rejects loopback/link-local but permits RFC1918, so probe
 // runs through its real production path here (real DNS via hosts file, real
 // dial, real tls-client transport, real redirect following).
 //
@@ -38,7 +39,7 @@ func TestPythonCookieServerE2E(t *testing.T) {
 		"http://cookie.test:9099/",
 		"http://other.test:9099/",
 	}) {
-		t.Skip("python cookie server not reachable (start tmp_cookiejar_test/server.py and add /etc/hosts entries)")
+		t.Skip("caller-provided cookie service or private DNS mapping unavailable; see docs/testing.md")
 	}
 
 	// --- EnableCookies=true: redirect-chain cookie carry (single target) ---

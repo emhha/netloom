@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 const headOnlySize = 100 * 1024 // 100 KB

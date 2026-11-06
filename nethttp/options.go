@@ -14,7 +14,7 @@ import (
 
 	"errors"
 	http "github.com/bogdanfinn/fhttp"
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 )
 
 type NameValue struct {
@@ -48,8 +48,8 @@ func token(value string) bool {
 	return true
 }
 
-func BuildRequest(in RequestInput) (*netrt.Request, error) {
-	u, err := netrt.HTTPURL(in.URL)
+func BuildRequest(in RequestInput) (*netloom.Request, error) {
+	u, err := netloom.HTTPURL(in.URL)
 	if err != nil {
 		return nil, errors.New(err.Error())
 	}
@@ -137,11 +137,11 @@ func BuildRequest(in RequestInput) (*netrt.Request, error) {
 	if in.HTTPVersion != "" && in.HTTPVersion != "auto" && in.HTTPVersion != "1.1" {
 		return nil, errors.New("http_version 支持 auto 或 1.1")
 	}
-	if !netrt.KnownProfile(in.TLSProfile) {
+	if !netloom.KnownProfile(in.TLSProfile) {
 		return nil, errors.New("未知 TLS 指纹配置")
 	}
-	return &netrt.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion,
-		Profile: netrt.ProfileByName(in.TLSProfile), VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}, nil
+	return &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion,
+		Profile: netloom.ProfileByName(in.TLSProfile), VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}, nil
 }
 
 func requestBody(in RequestInput, headers http.Header) ([]byte, error) {

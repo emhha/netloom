@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 func TestNativeRuleCorpora(t *testing.T) {

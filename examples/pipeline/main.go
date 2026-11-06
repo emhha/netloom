@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/emhha/netloom"
 	"log"
-	"netrt.local/netrt"
 	"os"
 )
 
@@ -12,16 +12,16 @@ func main() {
 	if len(os.Args) != 2 {
 		log.Fatal("usage: pipeline URL")
 	}
-	engine, err := netrt.New(netrt.Config{})
+	engine, err := netloom.New(netloom.Config{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer engine.Close()
-	task := netrt.Task{Req: &netrt.Request{URL: os.Args[1], VerifyTLS: true}, Pipeline: []netrt.Handler{func(c *netrt.Context) error {
+	task := netloom.Task{Req: &netloom.Request{URL: os.Args[1], VerifyTLS: true}, Pipeline: []netloom.Handler{func(c *netloom.Context) error {
 		c.Meta["status"] = c.Resp.StatusCode
 		return c.Next()
 	}}}
-	results, err := engine.Run(context.Background(), []netrt.Task{task})
+	results, err := engine.Run(context.Background(), []netloom.Task{task})
 	if err != nil {
 		log.Fatal(err)
 	}

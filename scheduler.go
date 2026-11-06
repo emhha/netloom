@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -201,7 +201,7 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 	c.tryEmit = s.trySubmit
 	if perr := c.run(); perr != nil {
 		c.Resp.Error = perr
-		s.logger.LogAttrs(ctx, slog.LevelWarn, "netrt: pipeline error",
+		s.logger.LogAttrs(ctx, slog.LevelWarn, "netloom: pipeline error",
 			slog.String("url", t.Req.URL), slog.String("err", perr.Error()))
 	}
 	s.deliver(&Result{Ctx: c})
@@ -253,7 +253,7 @@ func (s *scheduler) recordHostError(host string) {
 	s.hostErrorCount[host]++
 	if s.hostErrorCount[host] > s.cfg.MaxHostErrors && !s.skipped[host] {
 		s.skipped[host] = true
-		s.logger.Warn("netrt: host skipped after error threshold",
+		s.logger.Warn("netloom: host skipped after error threshold",
 			slog.String("host", host), slog.Int("errors", s.hostErrorCount[host]))
 	}
 }

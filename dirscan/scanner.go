@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 
 	http "github.com/bogdanfinn/fhttp"
 )
 
 // scanner is the orchestrator that owns the directories queue and drives the
-// netrt engine through the scan lifecycle. It maps to dirsearch's Controller.
+// netloom engine through the scan lifecycle. It maps to dirsearch's Controller.
 type scanner struct {
 	cfg     *Config
-	engine  *netrt.Engine
+	engine  *netloom.Engine
 	filter  *filterChain
 	baseURL *url.URL
 
@@ -57,7 +57,7 @@ func newScanner(cfg *Config) (*scanner, error) {
 		timeout = 10 * time.Second
 	}
 
-	eng, err := netrt.New(netrt.Config{
+	eng, err := netloom.New(netloom.Config{
 		Threads:       threads,
 		Timeout:       timeout,
 		Retries:       1,
@@ -267,7 +267,7 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 // buildWildcardProfile sends two random stealth requests to establish the
 // baseline and constructs a WildcardProfile.
 func (s *scanner) buildWildcardProfile(ctx context.Context, dir string, threshold int) *WildcardProfile {
-	var baselines [2]*netrt.Response
+	var baselines [2]*netloom.Response
 	for i := 0; i < 2; i++ {
 		probe := randomStealth()
 		fullURL := joinURL(s.cfg.BaseURL, dir, probe)
@@ -283,13 +283,13 @@ func (s *scanner) buildWildcardProfile(ctx context.Context, dir string, threshol
 	return newWildcardProfile(baselines, threshold)
 }
 
-// buildRequest creates a netrt.Request for the given URL with configured headers.
-func (s *scanner) buildRequest(fullURL string) *netrt.Request {
-	req := &netrt.Request{
+// buildRequest creates a netloom.Request for the given URL with configured headers.
+func (s *scanner) buildRequest(fullURL string) *netloom.Request {
+	req := &netloom.Request{
 		Method:  http.MethodGet,
 		URL:     fullURL,
 		Header:  http.Header{},
-		Profile: netrt.ProfileByName(s.cfg.TLSProfile),
+		Profile: netloom.ProfileByName(s.cfg.TLSProfile),
 		Timeout: s.cfg.Timeout,
 	}
 	if s.cfg.UserAgent != "" {
@@ -303,7 +303,7 @@ func (s *scanner) buildRequest(fullURL string) *netrt.Request {
 
 // recursionDirs returns new directory paths to recurse into based on the
 // discovered path and response, according to the configured recursion mode.
-func (s *scanner) recursionDirs(baseDir, path string, resp *netrt.Response) []string {
+func (s *scanner) recursionDirs(baseDir, path string, resp *netloom.Response) []string {
 	var dirs []string
 
 	// Check recursion-status: only recurse when status is in RecursionStatus.
@@ -482,7 +482,7 @@ func (s *scanner) prepareScan(ctx context.Context) error {
 		s.cfg.WildcardThreshold = 8
 	}
 
-	eng, err := netrt.New(netrt.Config{
+	eng, err := netloom.New(netloom.Config{
 		Threads:       s.cfg.Threads,
 		Timeout:       effectiveTimeout(s.cfg.Timeout),
 		Retries:       1,
@@ -516,7 +516,7 @@ func (s *scanner) detectAutoProfile(ctx context.Context) (*autoProfile, error) {
 		profile.threads = 20
 	}
 
-	probeEng, err := netrt.New(netrt.Config{
+	probeEng, err := netloom.New(netloom.Config{
 		Threads:       2,
 		Timeout:       minDuration(effectiveTimeout(s.cfg.Timeout), 5*time.Second),
 		Retries:       0,
@@ -570,7 +570,7 @@ func (s *scanner) detectAutoProfile(ctx context.Context) (*autoProfile, error) {
 	return profile, nil
 }
 
-func isWAFResponse(resp *netrt.Response) bool {
+func isWAFResponse(resp *netloom.Response) bool {
 	if resp == nil {
 		return false
 	}

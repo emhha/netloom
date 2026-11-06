@@ -6,8 +6,8 @@ import (
 	"mime"
 	"strings"
 
+	"github.com/emhha/netloom/httpdata"
 	"golang.org/x/net/html/charset"
-	"netrt.local/netrt/httpdata"
 )
 
 // decodeBodyToUTF8 returns the response body decoded to UTF-8. If the body is

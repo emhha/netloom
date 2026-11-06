@@ -2,11 +2,11 @@
 
 `dirsearch/db/` 是从 https://github.com/maurosoria/dirsearch.git 的 Git 对象导出的原样快照，只引入 `db` 子目录。`dirsearch/upstream.json` 固定完整提交号、db Git tree 和每个文件的 SHA-256；不随扫描自动更新。
 
-首次固定版本：`06c1be640c4479600064b22131a67f5f21fe2bca`。当前环境不能直接访问 GitHub，因此初次导入使用本机已有、origin 指向上游的干净 Git 检出，从提交对象读取，不复制工作区内容。该版本不是对最新 master 的承诺。
+固定版本：`06c1be640c4479600064b22131a67f5f21fe2bca`。快照从该提交的 Git 对象导出，不包含未提交修改；该版本不代表上游最新 master。
 
 ## 使用
 
-从 netrt 仓库根目录运行时可显式配置：
+从 Netloom 仓库根目录运行时可显式配置：
 
 ```go
 cfg := &dirscan.Config{
@@ -22,7 +22,7 @@ cfg := &dirscan.Config{
 
 ## 检查和更新
 
-需要 Python 3 和 Git；在 netrt 仓库根目录执行：
+需要 Python 3 和 Git；在 Netloom 仓库根目录执行：
 
 ```sh
 # 离线检查当前快照的完整性
@@ -43,7 +43,7 @@ python3 scripts/update-dirsearch-wordlists.py --source /path/to/dirsearch --ref 
 go test ./dirscan
 ```
 
-更新会先在临时目录导出并校验，再替换快照；上游删除的文件也会同步删除。现有快照与锁文件不一致时拒绝覆盖，失败的下载不会改变当前快照。确认 Git diff 中的字典、许可和 upstream.json 变化后，将它们与 netrt 一起提交，便可用 Git 回退到任何已收录版本。
+更新会先在临时目录导出并校验，再替换快照；上游删除的文件也会同步删除。现有快照与锁文件不一致时拒绝覆盖，失败的下载不会改变当前快照。确认 Git diff 中的字典、许可和 upstream.json 变化后，将它们与 Netloom 一起提交，便可用 Git 回退到任何已收录版本。
 
 这里使用随主仓库提交的 Git 来源快照，因此不需要 submodule 初始化，也不需要写父仓库 `.git`。只收录上游子目录，不引入整个 dirsearch 应用。
 

@@ -4,7 +4,7 @@ import (
 	"crypto/md5" //nolint:gosec // md5 used for body dedup hash, not security
 	"encoding/hex"
 	"fmt"
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 	"strings"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -17,7 +17,7 @@ type headerMutator struct {
 	customHeaders map[string]string
 }
 
-func (m *headerMutator) Mutate(req *netrt.Request) error {
+func (m *headerMutator) Mutate(req *netloom.Request) error {
 	if req.Header == nil {
 		req.Header = make(http.Header)
 	}
@@ -35,7 +35,7 @@ type proxyMutator struct {
 	proxyURL string
 }
 
-func (m *proxyMutator) Mutate(req *netrt.Request) error {
+func (m *proxyMutator) Mutate(req *netloom.Request) error {
 	if m.proxyURL != "" {
 		req.Proxy = m.proxyURL
 	}
@@ -43,18 +43,18 @@ func (m *proxyMutator) Mutate(req *netrt.Request) error {
 }
 
 // tlsProfileMutator applies the browser TLS fingerprint profile to the request.
-// Certificate verification is handled unconditionally by the netrt transport
+// Certificate verification is handled unconditionally by the netloom transport
 // (scanning always skips verify), so only the profile name is carried here.
 type tlsProfileMutator struct {
 	profileName string
 }
 
-func (m *tlsProfileMutator) Mutate(req *netrt.Request) error {
-	req.Profile = netrt.ProfileByName(m.profileName)
+func (m *tlsProfileMutator) Mutate(req *netloom.Request) error {
+	req.Profile = netloom.ProfileByName(m.profileName)
 	return nil
 }
 
-// certExtractor implements netrt.Extractor. It surfaces TLS certificate
+// certExtractor implements netloom.Extractor. It surfaces TLS certificate
 // information already captured by the Transport as a structured Artifact so
 // it travels through the Pipeline alongside other extraction outputs.
 // The TLSInfo itself is preserved on the Response; this extractor adds a
@@ -63,29 +63,29 @@ type certExtractor struct{}
 
 func (certExtractor) Name() string { return "cert" }
 
-func (certExtractor) Extract(resp *netrt.Response) ([]netrt.Artifact, error) {
+func (certExtractor) Extract(resp *netloom.Response) ([]netloom.Artifact, error) {
 	if resp.TLS == nil {
 		return nil, nil
 	}
-	arts := []netrt.Artifact{
+	arts := []netloom.Artifact{
 		{Type: "cert.subject", Value: resp.TLS.Subject},
 		{Type: "cert.issuer", Value: resp.TLS.Issuer},
 		{Type: "cert.sha256", Value: resp.TLS.FingerprintSHA256},
 		{Type: "cert.not_after", Value: resp.TLS.NotAfter.String()},
 	}
 	for _, san := range resp.TLS.SANs {
-		arts = append(arts, netrt.Artifact{Type: "cert.san", Value: san})
+		arts = append(arts, netloom.Artifact{Type: "cert.san", Value: san})
 	}
 	return arts, nil
 }
 
-// htmlExtractor implements netrt.Extractor. It extracts the <title> element
+// htmlExtractor implements netloom.Extractor. It extracts the <title> element
 // from the response body and writes it back to resp.Title.
 type htmlExtractor struct{}
 
 func (htmlExtractor) Name() string { return "html" }
 
-func (htmlExtractor) Extract(resp *netrt.Response) ([]netrt.Artifact, error) {
+func (htmlExtractor) Extract(resp *netloom.Response) ([]netloom.Artifact, error) {
 	if len(resp.Body) == 0 {
 		return nil, nil
 	}
@@ -125,25 +125,25 @@ func extractTitle(body []byte) string {
 // buildPipeline constructs the ordered handler slice for a probe request.
 // Request-side mutators run first (priority 10→30), then response-side
 // extractors run after the Transport returns (via AsExtractor wrapping).
-func buildPipeline(cfg *Config) []netrt.Handler {
+func buildPipeline(cfg *Config) []netloom.Handler {
 	// Request-side: ProxyMutator → HeaderMutator → TLSProfileMutator
-	proxy := netrt.AsMutator(&proxyMutator{proxyURL: cfg.ProxyURL})
-	header := netrt.AsMutator(&headerMutator{
+	proxy := netloom.AsMutator(&proxyMutator{proxyURL: cfg.ProxyURL})
+	header := netloom.AsMutator(&headerMutator{
 		userAgent:     defaultUserAgent(),
 		customHeaders: cfg.CustomHeaders,
 	})
-	tls := netrt.AsMutator(&tlsProfileMutator{
+	tls := netloom.AsMutator(&tlsProfileMutator{
 		profileName: cfg.TLSProfile,
 	})
 
 	// Response-side: CertExtractor → HTMLExtractor (soft404 is applied outside pipeline)
-	cert := netrt.AsExtractor(certExtractor{})
-	html := netrt.AsExtractor(htmlExtractor{})
+	cert := netloom.AsExtractor(certExtractor{})
+	html := netloom.AsExtractor(htmlExtractor{})
 
-	return []netrt.Handler{proxy, header, tls, cert, html}
+	return []netloom.Handler{proxy, header, tls, cert, html}
 }
 
 // defaultUserAgent returns the default User-Agent header value for probe requests.
 func defaultUserAgent() string {
-	return fmt.Sprintf("Mozilla/5.0 (compatible; netrt-probe/%s)", "1.0")
+	return fmt.Sprintf("Mozilla/5.0 (compatible; netloom-probe/%s)", "1.0")
 }

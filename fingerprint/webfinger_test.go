@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 func TestWebfingerMatcherFacade(t *testing.T) {

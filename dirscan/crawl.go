@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/emhha/netloom"
 	"golang.org/x/net/html"
-	"netrt.local/netrt"
 )
 
 // mediaExtBlacklist lists file extensions that are not worth adding to the
@@ -27,7 +27,7 @@ var reRobotsPath = regexp.MustCompile(`(?i)(?:Allow|Disallow):\s*(/[^\s]*)`)
 // ExtractLinks parses a response and returns a deduplicated list of relative
 // paths scoped to the same host as baseURL. Only paths that pass
 // isValidLink are included.
-func ExtractLinks(resp *netrt.Response, baseURL string) []string {
+func ExtractLinks(resp *netloom.Response, baseURL string) []string {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return nil
@@ -59,7 +59,7 @@ func ExtractLinks(resp *netrt.Response, baseURL string) []string {
 }
 
 // looksLikeRobots checks if the response path is robots.txt.
-func looksLikeRobots(resp *netrt.Response) bool {
+func looksLikeRobots(resp *netloom.Response) bool {
 	return resp != nil && strings.Contains(strings.ToLower(resp.Location), "robots")
 }
 

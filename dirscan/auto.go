@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 
 	http "github.com/bogdanfinn/fhttp"
 )
@@ -34,7 +34,7 @@ func TuneAutoConfig(ctx context.Context, cfg *Config) error {
 		profile.threads = 20
 	}
 
-	probeEng, err := netrt.New(netrt.Config{
+	probeEng, err := netloom.New(netloom.Config{
 		Threads:       2,
 		Timeout:       minDuration(effectiveTimeout(cfg.Timeout), 5*time.Second),
 		Retries:       0,
@@ -94,12 +94,12 @@ func TuneAutoConfig(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
-func buildAutoProbeRequest(cfg *Config, fullURL string) *netrt.Request {
-	req := &netrt.Request{
+func buildAutoProbeRequest(cfg *Config, fullURL string) *netloom.Request {
+	req := &netloom.Request{
 		Method:  http.MethodGet,
 		URL:     fullURL,
 		Header:  http.Header{},
-		Profile: netrt.ProfileByName(cfg.TLSProfile),
+		Profile: netloom.ProfileByName(cfg.TLSProfile),
 		Timeout: effectiveTimeout(cfg.Timeout),
 	}
 	if cfg.UserAgent != "" {

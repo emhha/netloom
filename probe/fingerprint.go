@@ -1,7 +1,7 @@
 package probe
 
 import (
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 	"sync"
 )
 
@@ -16,7 +16,7 @@ import (
 type FingerprintMatcher interface {
 	// MatchResponse runs all fingerprint engines against the given response and
 	// returns the names of all detected technologies.
-	MatchResponse(resp *netrt.Response) []string
+	MatchResponse(resp *netloom.Response) []string
 }
 
 // globalFingerprintMatcher is the package-level matcher, set once at startup.
@@ -35,7 +35,7 @@ func SetFingerprintMatcher(m FingerprintMatcher) {
 
 // matchFingerprints returns detected technology names for the given response.
 // Returns nil when fingerprinting is disabled or no matcher is registered.
-func matchFingerprints(resp *netrt.Response) []string {
+func matchFingerprints(resp *netloom.Response) []string {
 	fingerprintMatcherMu.RLock()
 	matcher := globalFingerprintMatcher
 	fingerprintMatcherMu.RUnlock()

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 // TestTwoPhaseAC verifies that Phase 1 (AC) correctly gates Phase 2 (regex).
@@ -28,6 +28,12 @@ func TestTwoPhaseAC(t *testing.T) {
 // unconditionally even without an AC hit.
 func TestFallbackRulesAlwaysRun(t *testing.T) {
 	e := New()
+	if err := e.AddRule(Rule{
+		Name: "email", Pattern: `[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`,
+		Scope: "all", Sensitivity: "low",
+	}); err != nil {
+		t.Fatalf("AddRule: %v", err)
+	}
 
 	body := []byte("contact us at admin@example.com for more info")
 	findings := e.ExtractWithContentType(body, nil, "text/html")
@@ -108,6 +114,13 @@ func TestHeaderScan(t *testing.T) {
 // TestSpecialCategoryJSOnly verifies linkfinder only runs for JS/JSON content.
 func TestSpecialCategoryJSOnly(t *testing.T) {
 	e := New()
+	if err := e.AddRule(Rule{
+		Name: "linkfinder", Pattern: `(?:"|')(/(?:api|v[0-9]+|graphql)/[a-zA-Z0-9_/\-?=&]{1,200})(?:"|')`,
+		Scope: "body", Sensitivity: "low", Category: "special",
+		Triggers: []string{"/api/", "/v1/", "/v2/", "/graphql"},
+	}); err != nil {
+		t.Fatalf("AddRule: %v", err)
+	}
 
 	jsBody := []byte(`"/api/v1/users" some js content`)
 
@@ -189,7 +202,7 @@ func TestAddRuleSameNameOverwrite(t *testing.T) {
 
 	// Add custom rule with same name as built-in; it uses a different pattern.
 	err := e.AddRule(Rule{
-		Name:        "email",
+		Name:        "aws_access_key",
 		Pattern:     `CUSTOM_([a-z]+)`,
 		Color:       "green",
 		Scope:       "body",
@@ -200,18 +213,32 @@ func TestAddRuleSameNameOverwrite(t *testing.T) {
 		t.Fatalf("AddRule: %v", err)
 	}
 
-	// Count how many "email" rules exist (should be exactly 1).
+	// Count how many "aws_access_key" rules exist (should be exactly 1).
 	e.mu.RLock()
 	count := 0
 	for _, cr := range e.rules {
-		if cr.Name == "email" {
+		if cr.Name == "aws_access_key" {
 			count++
 		}
 	}
 	e.mu.RUnlock()
 
 	if count != 1 {
-		t.Errorf("expected exactly 1 rule named 'email', got %d", count)
+		t.Errorf("expected exactly 1 rule named 'aws_access_key', got %d", count)
+	}
+
+	findings := e.ExtractWithContentType([]byte("CUSTOM_replacement AKIAIOSFODNN7EXAMPLE"), nil, "text/html")
+	count = 0
+	for _, f := range findings {
+		if f.RuleName == "aws_access_key" {
+			count++
+			if f.Value != "CUSTOM_replacement" {
+				t.Errorf("overwritten rule matched old pattern: %+v", f)
+			}
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 replacement finding, got %d", count)
 	}
 }
 
@@ -240,6 +267,12 @@ func TestAddRuleInvalidPattern(t *testing.T) {
 // TestInternalIPFallback checks that internal IPs are detected without triggers.
 func TestInternalIPFallback(t *testing.T) {
 	e := New()
+	if err := e.AddRule(Rule{
+		Name: "internal_ip", Pattern: `(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)`,
+		Scope: "all", Sensitivity: "medium",
+	}); err != nil {
+		t.Fatalf("AddRule: %v", err)
+	}
 	body := []byte("connect to 192.168.1.100 for service")
 	findings := e.ExtractWithContentType(body, nil, "text/html")
 
@@ -251,5 +284,31 @@ func TestInternalIPFallback(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected internal_ip finding")
+	}
+}
+
+// TestDefaultRulesHighSensitivityOnly preserves the intentionally narrow defaults.
+func TestDefaultRulesHighSensitivityOnly(t *testing.T) {
+	removed := map[string]bool{
+		"password_field": true, "internal_ip": true, "id_card_cn": true,
+		"wechat_appid": true, "email": true, "ipv4": true, "url": true,
+		"phone_cn": true, "linkfinder": true,
+	}
+	rules := defaultRules()
+	if len(rules) == 0 {
+		t.Fatal("expected high-sensitivity built-in rules")
+	}
+	for _, rule := range rules {
+		if rule.Sensitivity != "high" {
+			t.Errorf("default rule %q has sensitivity %q, want high", rule.Name, rule.Sensitivity)
+		}
+		if removed[rule.Name] {
+			t.Errorf("removed rule %q returned to defaults", rule.Name)
+		}
+	}
+	for _, rule := range New().rules {
+		if removed[rule.Name] {
+			t.Errorf("removed rule %q registered by New", rule.Name)
+		}
 	}
 }

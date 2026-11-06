@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 
 	http "github.com/bogdanfinn/fhttp"
 )
@@ -391,12 +391,12 @@ func TestWildcardProfile_Classify_WildcardThreshold(t *testing.T) {
 
 // --- Test helpers ---
 
-func mockResp(status int, ct, body string) *netrt.Response {
+func mockResp(status int, ct, body string) *netloom.Response {
 	return mockRespWithContentType(status, ct, body, "")
 }
 
-func mockRespWithContentType(status int, ct, body, location string) *netrt.Response {
-	return &netrt.Response{
+func mockRespWithContentType(status int, ct, body, location string) *netloom.Response {
+	return &netloom.Response{
 		StatusCode:   status,
 		ContentType:  ct,
 		Body:         []byte(body),

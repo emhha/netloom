@@ -1,7 +1,7 @@
 package passive
 
 import (
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 	"testing"
 )
 

@@ -1,6 +1,6 @@
 # 指纹规则目录
 
-`finger.yaml` 保存固定版本的生产指纹规则，与原文件逐字节相同。它从本机已有的 webfinger Git 提交对象导出，没有在导入时抓取新规则。
+`finger.yaml` 是 webfinger 指纹规则的固定版本快照，保留上游文件字节，不随运行自动更新。
 
 来源：https://github.com/jjf012/webfinger.git
 
@@ -10,7 +10,7 @@
 
 ## 加载
 
-在 netrt 仓库根目录运行时：
+在 Netloom 仓库根目录运行时：
 
 ```go
 engine, err := fingerprint.New(ctx, fingerprint.Config{
@@ -43,15 +43,15 @@ my-app:
 
 ## Wappalyzer 规则
 
-`wappalyzer.json` 是完整规则文件，包含 7,540 项技术，原样取自 projectdiscovery/wappalyzergo 的 fingerprints_data.json，固定提交 `efb75ceb931f003b6c224d414fb0cba3116c0b08`，替换原来的空测试夹具。
+`wappalyzer.json` 是完整规则文件，包含 7,540 项技术，原样取自 projectdiscovery/wappalyzergo 的 fingerprints_data.json，固定提交 `efb75ceb931f003b6c224d414fb0cba3116c0b08`。
 
-来源：https://github.com/projectdiscovery/wappalyzergo 。`wappalyzer.upstream.json` 记录提交、文件路径和 SHA-256；原始项目 README 与 MIT 许可分别保留于 README.wappalyzergo.md、LICENSE.wappalyzergo.md。本次 GitHub 连接器及直接下载均因网络不可用而失败，因此从本机已有 Git 提交对象导入，不宣称远端最新版。
+来源：https://github.com/projectdiscovery/wappalyzergo 。`wappalyzer.upstream.json` 记录提交、文件路径和 SHA-256；原始项目 README 与 MIT 许可分别保留于 README.wappalyzergo.md、LICENSE.wappalyzergo.md。该快照不代表上游最新版。
 
 使用 `WappalyzerJSONPath` 显式加载；`CustomRulesDir` 只读取 YAML，不会自动加载这个 JSON。当前离线解析器支持 headers/cookies/html/scripts/scriptSrc/meta/implies 等字段，不执行浏览器 JavaScript 或主动探测；数据文件中其他字段保留，但不代表全部检测能力均已实现。
 
 ## EHole 与 FingerprintHub
 
-两份 JSON 由用户下载提供，本次保持字节不变。`native-sources.upstream.json` 记录源 URL、文件名、规则数及 SHA-256；没有获知源提交号，未臆造版本或许可。
+两份 JSON 保留上游格式与原始字节。`native-sources.upstream.json` 记录源 URL、文件名、规则数及 SHA-256；未记录上游提交号，因此不声明精确提交版本或额外许可。
 
 - EHole：https://github.com/EdgeSecurityTeam/EHole/blob/main/finger.json ，958 条。原生 cms/method/location/keyword 格式；同一规则的关键词全部满足，不同规则为备选。keyword 忽略大小写，regular 使用 Go 正则，支持 body/header/title 和已捕获 favicon 的 mmh3。header 按其格式使用 JSON 序列化。
 - FingerprintHub：https://github.com/0x727/FingerprintHub/blob/main/web_fingerprint_v4.json ，3,425 个模板（本地名 fingerprinthub_v4.json）。自行解析 http/matchers；支持 word/regex/favicon、and/or、case-insensitive、negative、MD5/mmh3 图标哈希及 regex 版本提取。未知匹配类型及无效正则返回明确错误。

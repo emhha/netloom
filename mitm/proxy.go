@@ -42,7 +42,7 @@ type Options struct{ Username, Password, Realm string }
 func New(authority *Authority, backend Backend, opts Options) *Proxy {
 	realm := opts.Realm
 	if realm == "" {
-		realm = "netrt"
+		realm = "netloom"
 	}
 	realm = strings.NewReplacer("\r", "", "\n", "", "\"", "", "\\", "").Replace(realm)
 	return &Proxy{authority: authority, backend: backend, username: opts.Username, realm: realm, password: sha256.Sum256([]byte(opts.Password)), connections: make(map[net.Conn]struct{})}

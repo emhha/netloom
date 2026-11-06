@@ -1,6 +1,6 @@
 //go:build integration
 
-package netrt
+package netloom
 
 import (
 	"bytes"

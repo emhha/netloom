@@ -2,7 +2,7 @@
 /.aws/
 /.codex/
 /.git-publish/
-/netrt-publish.bundle
+/*-publish.bundle
 __pycache__/
 *.py[cod]
 *.test

@@ -37,12 +37,12 @@ type AuthorityOptions struct {
 }
 
 func NewAuthority(options ...AuthorityOptions) (*Authority, error) {
-	opts := AuthorityOptions{CommonName: "netrt MITM CA", CacheCapacity: 256}
+	opts := AuthorityOptions{CommonName: "netloom MITM CA", CacheCapacity: 256}
 	if len(options) > 0 {
 		opts = options[0]
 	}
 	if opts.CommonName == "" {
-		opts.CommonName = "netrt MITM CA"
+		opts.CommonName = "netloom MITM CA"
 	}
 	if opts.CacheCapacity <= 0 {
 		opts.CacheCapacity = 256

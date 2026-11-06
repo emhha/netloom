@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 )
 
 // defaultExcludeStatus is the default set of status codes treated as "not found".
@@ -29,10 +29,10 @@ type filterChain struct {
 	filterMode string // "and" | "or"
 }
 
-// predicate is a compiled match function over a netrt.Response.
+// predicate is a compiled match function over a netloom.Response.
 type predicate struct {
 	name string
-	fn   func(*netrt.Response) bool
+	fn   func(*netloom.Response) bool
 }
 
 // buildFilterChain compiles all filter predicates from cfg.
@@ -85,14 +85,14 @@ func buildFilterChain(cfg *Config) (*filterChain, error) {
 		fc.matchers = append(fc.matchers, p)
 	}
 	if cfg.MatchWords != "" {
-		p, err := makeIntPredicate("match-words", cfg.MatchWords, func(r *netrt.Response) int { return r.WordCount })
+		p, err := makeIntPredicate("match-words", cfg.MatchWords, func(r *netloom.Response) int { return r.WordCount })
 		if err != nil {
 			return nil, err
 		}
 		fc.matchers = append(fc.matchers, p)
 	}
 	if cfg.MatchLines != "" {
-		p, err := makeIntPredicate("match-lines", cfg.MatchLines, func(r *netrt.Response) int { return r.LineCount })
+		p, err := makeIntPredicate("match-lines", cfg.MatchLines, func(r *netloom.Response) int { return r.LineCount })
 		if err != nil {
 			return nil, err
 		}
@@ -128,14 +128,14 @@ func buildFilterChain(cfg *Config) (*filterChain, error) {
 		fc.filters = append(fc.filters, p)
 	}
 	if cfg.FilterWords != "" {
-		p, err := makeIntPredicate("filter-words", cfg.FilterWords, func(r *netrt.Response) int { return r.WordCount })
+		p, err := makeIntPredicate("filter-words", cfg.FilterWords, func(r *netloom.Response) int { return r.WordCount })
 		if err != nil {
 			return nil, err
 		}
 		fc.filters = append(fc.filters, p)
 	}
 	if cfg.FilterLines != "" {
-		p, err := makeIntPredicate("filter-lines", cfg.FilterLines, func(r *netrt.Response) int { return r.LineCount })
+		p, err := makeIntPredicate("filter-lines", cfg.FilterLines, func(r *netloom.Response) int { return r.LineCount })
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +163,7 @@ func buildFilterChain(cfg *Config) (*filterChain, error) {
 }
 
 // Keep returns true when the response should be reported as a result.
-func (fc *filterChain) Keep(resp *netrt.Response) bool {
+func (fc *filterChain) Keep(resp *netloom.Response) bool {
 	if resp == nil {
 		return false
 	}
@@ -214,7 +214,7 @@ func (fc *filterChain) Keep(resp *netrt.Response) bool {
 }
 
 // evalPredicates evaluates a slice of predicates in the given mode ("and"|"or").
-func evalPredicates(preds []predicate, mode string, resp *netrt.Response) bool {
+func evalPredicates(preds []predicate, mode string, resp *netloom.Response) bool {
 	if len(preds) == 0 {
 		return true
 	}
@@ -265,7 +265,7 @@ func (r intRange) contains(v int) bool { return v >= r.lo && v <= r.hi }
 
 func makeStatusPredicate(name, spec string) predicate {
 	ranges := parseStatusSpec(spec)
-	return predicate{name: name, fn: func(r *netrt.Response) bool {
+	return predicate{name: name, fn: func(r *netloom.Response) bool {
 		for _, rng := range ranges {
 			if rng.contains(r.StatusCode) {
 				return true
@@ -281,7 +281,7 @@ func makeSizePredicate(name, spec string) (predicate, error) {
 	if len(ranges) == 0 {
 		return predicate{}, nil
 	}
-	return predicate{name: name, fn: func(r *netrt.Response) bool {
+	return predicate{name: name, fn: func(r *netloom.Response) bool {
 		size := len(r.Body)
 		for _, rng := range ranges {
 			if rng.contains(size) {
@@ -292,12 +292,12 @@ func makeSizePredicate(name, spec string) (predicate, error) {
 	}}, nil
 }
 
-func makeIntPredicate(name, spec string, getter func(*netrt.Response) int) (predicate, error) {
+func makeIntPredicate(name, spec string, getter func(*netloom.Response) int) (predicate, error) {
 	ranges := parseStatusSpec(spec)
 	if len(ranges) == 0 {
 		return predicate{}, nil
 	}
-	return predicate{name: name, fn: func(r *netrt.Response) bool {
+	return predicate{name: name, fn: func(r *netloom.Response) bool {
 		v := getter(r)
 		for _, rng := range ranges {
 			if rng.contains(v) {
@@ -313,7 +313,7 @@ func makeRegexPredicate(name, pattern string) (predicate, error) {
 	if err != nil {
 		return predicate{}, err
 	}
-	return predicate{name: name, fn: func(r *netrt.Response) bool {
+	return predicate{name: name, fn: func(r *netloom.Response) bool {
 		return rx.Match(r.Body)
 	}}, nil
 }
@@ -323,12 +323,12 @@ func makeHeaderPredicate(name, spec string) predicate {
 	if idx := strings.Index(spec, ":"); idx >= 0 {
 		hdr := strings.TrimSpace(spec[:idx])
 		val := strings.TrimSpace(spec[idx+1:])
-		return predicate{name: name, fn: func(r *netrt.Response) bool {
+		return predicate{name: name, fn: func(r *netloom.Response) bool {
 			return strings.Contains(r.Header.Get(hdr), val)
 		}}
 	}
 	hdr := strings.TrimSpace(spec)
-	return predicate{name: name, fn: func(r *netrt.Response) bool {
+	return predicate{name: name, fn: func(r *netloom.Response) bool {
 		return r.Header.Get(hdr) != ""
 	}}
 }
@@ -344,7 +344,7 @@ func makeTimePredicate(name, spec string) (predicate, error) {
 		}
 		d = time.Duration(ms * float64(time.Millisecond))
 	}
-	return predicate{name: name, fn: func(r *netrt.Response) bool {
+	return predicate{name: name, fn: func(r *netloom.Response) bool {
 		return r.ResponseTime <= d
 	}}, nil
 }

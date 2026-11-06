@@ -1,6 +1,6 @@
 //go:build integration
 
-package netrt
+package netloom
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 
 // TestPythonCookieServerE2E drives a Python HTTP server that sets a cookie and
 // then verifies whether it was sent back, exercising the real tls-client jar
-// path. It exists to be run on demand against ./tmp_cookiejar_test/server.py
-// (which the repository root test script starts). It is skipped unless the
-// server is reachable, so the normal test suite is unaffected.
+// path. Supply a controlled service implementing the responses asserted below;
+// see docs/testing.md for external service prerequisites. The test is skipped
+// unless the service is reachable.
 //
 //   - with per-host cookies ENABLED, /check must see "has:..."
 //   - with per-host cookies DISABLED (default), /check must see "none"
@@ -23,7 +23,7 @@ func TestPythonCookieServerE2E(t *testing.T) {
 	tr := newTLSTransport(defaultMaxBodySize)
 	probe, err := tr.roundTripNoGuard(context.Background(), &Request{URL: base + "/"})
 	if err != nil {
-		t.Skipf("python server not reachable (start tmp_cookiejar_test/server.py first): %v", err)
+		t.Skipf("caller-provided cookie service not reachable; see docs/testing.md: %v", err)
 	}
 	if string(probe.Body) != "cookiejar test server ok" {
 		t.Fatalf("unexpected probe response: %q", probe.Body)

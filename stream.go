@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"bytes"
@@ -33,11 +33,11 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 		}
 	}()
 	if len(req.Raw) != 0 {
-		return nil, fmt.Errorf("netrt.SendStream: raw requests are unsupported")
+		return nil, fmt.Errorf("netloom.SendStream: raw requests are unsupported")
 	}
 	transport, ok := e.tlsT.(*tlsTransport)
 	if !ok {
-		return nil, fmt.Errorf("netrt.SendStream: streaming transport unavailable")
+		return nil, fmt.Errorf("netloom.SendStream: streaming transport unavailable")
 	}
 	queued := time.Now()
 	release, err := e.acquireSend(ctx, req)
@@ -70,7 +70,7 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	if err != nil {
 		client.CloseIdleConnections()
 		release()
-		return nil, fmt.Errorf("netrt.SendStream: %w", err)
+		return nil, fmt.Errorf("netloom.SendStream: %w", err)
 	}
 	meta := &Response{RequestHeaders: request.Header.Clone(), StatusCode: response.StatusCode, Header: response.Header,
 		ContentLength: response.ContentLength, ContentType: response.Header.Get("Content-Type"),

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 func assertNativeEquivalent(t *testing.T, eh *EHoleMatcher, hub *FingerprintHubMatcher, request *httpdata.Request, response *httpdata.Response) {

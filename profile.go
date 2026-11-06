@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import "github.com/bogdanfinn/tls-client/profiles"
 
@@ -8,7 +8,7 @@ import "github.com/bogdanfinn/tls-client/profiles"
 // against a zero ClientProfile.
 //
 // It exists so upper layers (pkg/probe, pkg/dirscan) can keep configuring the
-// fingerprint with a plain string while netrt owns the tls-client dependency.
+// fingerprint with a plain string while netloom owns the tls-client dependency.
 func ProfileByName(name string) profiles.ClientProfile {
 	if name == "" {
 		return profiles.DefaultClientProfile

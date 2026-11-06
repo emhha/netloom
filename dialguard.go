@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 // resolves to a permanently forbidden address class (loopback / link-local).
 // It is a network-layer SSRF primitive: it fires regardless of any upper-layer
 // scope configuration, and is independent of business authorization.
-var ErrBlockedAddress = errors.New("netrt: blocked address (loopback/link-local)")
+var ErrBlockedAddress = errors.New("netloom: blocked address (loopback/link-local)")
 
 // isBlockedIP reports whether ip belongs to a permanently rejected class.
 //
@@ -53,13 +53,13 @@ func guardedDialContext(base *net.Dialer, resolver *net.Resolver) func(ctx conte
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
-			return nil, fmt.Errorf("netrt.dial: %w", err)
+			return nil, fmt.Errorf("netloom.dial: %w", err)
 		}
 
 		// If addr is already an IP literal, validate and dial it directly.
 		if ip := net.ParseIP(host); ip != nil {
 			if isBlockedIP(ip) {
-				return nil, fmt.Errorf("netrt.dial %s: %w", addr, ErrBlockedAddress)
+				return nil, fmt.Errorf("netloom.dial %s: %w", addr, ErrBlockedAddress)
 			}
 			start := time.Now()
 			conn, err := base.DialContext(ctx, network, addr)
@@ -71,10 +71,10 @@ func guardedDialContext(base *net.Dialer, resolver *net.Resolver) func(ctx conte
 		ips, err := resolver.LookupIPAddr(ctx, host)
 		recordMeasured(ctx, "dns", start)
 		if err != nil {
-			return nil, fmt.Errorf("netrt.dial resolve %s: %w", host, err)
+			return nil, fmt.Errorf("netloom.dial resolve %s: %w", host, err)
 		}
 		if len(ips) == 0 {
-			return nil, fmt.Errorf("netrt.dial resolve %s: no addresses", host)
+			return nil, fmt.Errorf("netloom.dial resolve %s: no addresses", host)
 		}
 
 		// Validate every candidate, then dial the first allowed literal so the
@@ -83,7 +83,7 @@ func guardedDialContext(base *net.Dialer, resolver *net.Resolver) func(ctx conte
 		for _, ipa := range ips {
 			if isBlockedIP(ipa.IP) {
 				if firstErr == nil {
-					firstErr = fmt.Errorf("netrt.dial %s -> %s: %w", host, ipa.IP, ErrBlockedAddress)
+					firstErr = fmt.Errorf("netloom.dial %s -> %s: %w", host, ipa.IP, ErrBlockedAddress)
 				}
 				continue
 			}
@@ -101,6 +101,6 @@ func guardedDialContext(base *net.Dialer, resolver *net.Resolver) func(ctx conte
 		if firstErr != nil {
 			return nil, firstErr
 		}
-		return nil, fmt.Errorf("netrt.dial %s: no dialable address", host)
+		return nil, fmt.Errorf("netloom.dial %s: no dialable address", host)
 	}
 }

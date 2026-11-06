@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 
 	"golang.org/x/net/html"
 )

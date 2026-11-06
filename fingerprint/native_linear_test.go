@@ -4,8 +4,8 @@ package fingerprint
 import (
 	"context"
 	"encoding/json"
+	"github.com/emhha/netloom/httpdata"
 	"net/url"
-	"netrt.local/netrt/httpdata"
 	"strconv"
 	"strings"
 )

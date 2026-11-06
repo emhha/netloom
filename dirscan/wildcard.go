@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"netrt.local/netrt"
+	"github.com/emhha/netloom"
 )
 
 // WildcardProfile captures the auto-calibration baseline for a single
@@ -37,7 +37,7 @@ type WildcardProfile struct {
 // newWildcardProfile builds a WildcardProfile using two pre-fetched random
 // responses. baselines must contain exactly two responses; auto must contain
 // two more for the calibration step.
-func newWildcardProfile(baselines [2]*netrt.Response, threshold int) *WildcardProfile {
+func newWildcardProfile(baselines [2]*netloom.Response, threshold int) *WildcardProfile {
 	wp := &WildcardProfile{
 		FingerprintCounts: make(map[string]int),
 		Threshold:         threshold,
@@ -83,7 +83,7 @@ func newWildcardProfile(baselines [2]*netrt.Response, threshold int) *WildcardPr
 
 // Classify decides whether resp represents a unique finding or a wildcard/soft-404.
 // Returns "unique" when the response is interesting, "wildcard" otherwise.
-func (wp *WildcardProfile) Classify(path string, resp *netrt.Response) string {
+func (wp *WildcardProfile) Classify(path string, resp *netloom.Response) string {
 	if resp == nil {
 		return "wildcard"
 	}
@@ -131,7 +131,7 @@ func (wp *WildcardProfile) Classify(path string, resp *netrt.Response) string {
 //   - Length variance < 35%
 //   - Body echoes the request path
 //   - Static tokens < 20 (high dynamic)
-func isProbableWildcard(path string, resp *netrt.Response, wp *WildcardProfile) bool {
+func isProbableWildcard(path string, resp *netloom.Response, wp *WildcardProfile) bool {
 	if len(wp.staticTokens) < 20 && wp.Dynamic {
 		return true
 	}
@@ -144,7 +144,7 @@ func isProbableWildcard(path string, resp *netrt.Response, wp *WildcardProfile) 
 
 // ResponseFingerprint computes a compact fingerprint string for a response.
 // Identical fingerprints indicate repeated / wildcard responses.
-func ResponseFingerprint(resp *netrt.Response) string {
+func ResponseFingerprint(resp *netloom.Response) string {
 	if resp == nil {
 		return "nil"
 	}

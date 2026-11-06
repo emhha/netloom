@@ -8,9 +8,9 @@ import (
 	"mime"
 	"sync"
 
-	"netrt.local/netrt/fingerprint"
-	"netrt.local/netrt/infoextract"
-	"netrt.local/netrt/passive"
+	"github.com/emhha/netloom/fingerprint"
+	"github.com/emhha/netloom/infoextract"
+	"github.com/emhha/netloom/passive"
 )
 
 type Information struct {

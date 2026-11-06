@@ -2,8 +2,8 @@ package probe
 
 import (
 	"fmt"
+	"github.com/emhha/netloom"
 	"net/url"
-	"netrt.local/netrt"
 	"strconv"
 	"time"
 )
@@ -18,7 +18,7 @@ type Result struct {
 	// (domain is preferred over IP; if no domain, IP is used).
 	TargetKey string
 
-	Redirects     []netrt.RedirectHop
+	Redirects     []netloom.RedirectHop
 	StatusCode    int
 	Title         string
 	WebServer     string
@@ -27,7 +27,7 @@ type Result struct {
 	ResponseTime  time.Duration
 	ContentLength int64
 	BodyHash      string
-	TLS           *netrt.TLSInfo
+	TLS           *netloom.TLSInfo
 	Fingerprints  []string // populated when Config.EnableFingerprint is true
 	IsSoft404     bool
 

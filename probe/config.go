@@ -1,8 +1,8 @@
 // Package probe implements batch HTTP/HTTPS liveness detection (探活).
 //
-// It runs on top of the netrt network runtime and is zero-business-dependency:
+// It runs on top of the netloom network runtime and is zero-business-dependency:
 // scope authorization is performed by the caller (service layer) before Run is
-// invoked. The netrt Transport enforces loopback/link-local rejection at the
+// invoked. The netloom Transport enforces loopback/link-local rejection at the
 // dial layer regardless of any probe configuration.
 //
 // Typical usage:
@@ -39,10 +39,10 @@ type ProbeConfig struct {
 	// Timeout & retry.
 	Timeout    time.Duration // per-request timeout (default 10s)
 	MaxRetries int           // retries on network/timeout errors (zero defaults to 2; negative disables)
-	RetryDelay time.Duration // delay between retries (default 1s; unused by netrt directly, kept for reference)
+	RetryDelay time.Duration // delay between retries (default 1s; unused by netloom directly, kept for reference)
 
 	// TLS / proxy.
-	TLSProfile string // browser TLS fingerprint name, resolved via netrt.ProfileByName (e.g. "chrome_131")
+	TLSProfile string // browser TLS fingerprint name, resolved via netloom.ProfileByName (e.g. "chrome_131")
 	SkipVerify bool   // explicitly skip TLS verification; service scan defaults set this to true
 	ProxyURL   string // optional HTTP/SOCKS proxy
 
@@ -56,11 +56,11 @@ type ProbeConfig struct {
 	CustomHeaders  map[string]string // extra request headers
 	NoFallback     bool              // disable HTTPS → HTTP fallback
 
-	// EnableCookies turns on netrt's per-host cookie jar: Set-Cookie from a
+	// EnableCookies turns on netloom's per-host cookie jar: Set-Cookie from a
 	// host is honoured on later requests to the same host (redirects, retries,
 	// concurrent same-host requests), while cookies never leak across hosts.
 	// Default false keeps probe stateless. Requires each target to be probed
-	// through the same netrt Engine, which probe.Run does automatically.
+	// through the same netloom Engine, which probe.Run does automatically.
 	EnableCookies bool
 }
 

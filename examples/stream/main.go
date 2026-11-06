@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"github.com/emhha/netloom"
 	"io"
 	"log"
-	"netrt.local/netrt"
 	"os"
 )
 
@@ -12,12 +12,12 @@ func main() {
 	if len(os.Args) != 2 {
 		log.Fatal("usage: stream URL")
 	}
-	engine, err := netrt.New(netrt.Config{})
+	engine, err := netloom.New(netloom.Config{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer engine.Close()
-	response, err := engine.SendStream(context.Background(), &netrt.Request{URL: os.Args[1], VerifyTLS: true})
+	response, err := engine.SendStream(context.Background(), &netloom.Request{URL: os.Args[1], VerifyTLS: true})
 	if err != nil {
 		log.Fatal(err)
 	}

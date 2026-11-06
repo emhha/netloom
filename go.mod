@@ -1,4 +1,4 @@
-module netrt.local/netrt
+module github.com/emhha/netloom
 
 go 1.26.0
 
@@ -8,6 +8,7 @@ require (
 	github.com/bogdanfinn/tls-client v1.15.1
 	github.com/bogdanfinn/utls v1.7.7-barnius
 	github.com/klauspost/compress v1.18.6
+	github.com/oschwald/geoip2-golang v1.13.0
 	golang.org/x/net v0.59.0
 )
 
@@ -17,6 +18,7 @@ require (
 	github.com/bogdanfinn/quic-go-utls v1.0.9-utls // indirect
 	github.com/bogdanfinn/websocket v1.5.5-barnius // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/tam7t/hpkp v0.0.0-20160821193359-2b70b4024ed5 // indirect

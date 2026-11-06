@@ -5,7 +5,7 @@ import (
 )
 
 // parser implements a recursive descent parser over the token stream produced
-// by the lexer. Grammar (from SRS):
+// by the lexer. The supported expression grammar is:
 //
 //	expr      = orExpr
 //	orExpr    = andExpr { "||" andExpr }

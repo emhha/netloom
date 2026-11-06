@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 func BenchmarkNativeMatchers(b *testing.B) {

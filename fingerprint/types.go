@@ -9,7 +9,7 @@
 package fingerprint
 
 import (
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 // Artifact is a fingerprint detection result for a single technology.

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 type Input struct {

@@ -1,6 +1,6 @@
 //go:build integration
 
-package netrt
+package netloom
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -27,7 +28,7 @@ func testCertificates(t *testing.T, ip net.IP) (caPEM, serverCert, serverKey, cl
 	if err != nil {
 		t.Fatal(err)
 	}
-	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "netrt test CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
+	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "netloom test CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
 	der, err := x509.CreateCertificate(rand.Reader, ca, ca, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)
@@ -107,19 +108,77 @@ func TestCustomTrustAndMTLSTransports(t *testing.T) {
 }
 
 func TestProxyIsUsedBySendAndStream(t *testing.T) {
-	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Host != "example.invalid" {
-			t.Errorf("unexpected proxy target %s", r.URL)
+	var proxyHits, originHits atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil || r.Method != http.MethodPost || r.Host != "example.invalid" || r.RequestURI != "/path" || string(body) != "proxy-request-payload" {
+			t.Errorf("unexpected tunneled request: method=%s host=%s uri=%s body=%q err=%v", r.Method, r.Host, r.RequestURI, body, err)
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
 		}
+		originHits.Add(1)
+		w.Header().Set("Connection", "close")
 		_, _ = io.WriteString(w, "via-proxy")
 	}))
+	defer origin.Close()
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// tls-client tunnels even plain HTTP through its CONNECT dialer.
+		if r.Method != http.MethodConnect || r.Host != "example.invalid:80" || r.URL.Host != "example.invalid:80" {
+			t.Errorf("unexpected proxy request: method=%s host=%s url=%s", r.Method, r.Host, r.URL)
+			http.Error(w, "unexpected CONNECT target", http.StatusBadRequest)
+			return
+		}
+		// Resolve this reserved test target to the local origin only inside the
+		// proxy, so direct requests cannot accidentally satisfy the assertions.
+		upstream, err := net.DialTimeout("tcp", origin.Listener.Addr().String(), time.Second)
+		if err != nil {
+			t.Errorf("proxy dial: %v", err)
+			http.Error(w, "proxy dial failed", http.StatusBadGateway)
+			return
+		}
+		defer upstream.Close()
+		conn, buffered, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("proxy hijack: %v", err)
+			return
+		}
+		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		_ = upstream.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err = buffered.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err == nil {
+			err = buffered.Flush()
+		}
+		if err != nil {
+			t.Errorf("CONNECT response: %v", err)
+			return
+		}
+		proxyHits.Add(1)
+		done := make(chan struct{})
+		go func() {
+			_, _ = io.Copy(upstream, buffered)
+			close(done)
+		}()
+		_, _ = io.Copy(conn, upstream)
+		_ = conn.Close()
+		_ = upstream.Close()
+		<-done
+	}))
 	defer proxy.Close()
-	engine, _ := New(Config{Retries: -1})
+	engine, err := New(Config{Retries: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer engine.Close()
-	request := &Request{URL: "http://example.invalid/path", Proxy: proxy.URL}
+	request := &Request{Method: http.MethodPost, URL: "http://example.invalid/path", Proxy: proxy.URL, Body: []byte("proxy-request-payload"), Timeout: 5 * time.Second}
 	response, err := engine.Send(context.Background(), request)
-	if err != nil || string(response.Body) != "via-proxy" {
+	if err != nil {
 		t.Fatalf("Send: %v", err)
+	}
+	if response.StatusCode != http.StatusOK || string(response.Body) != "via-proxy" {
+		t.Fatalf("Send: status=%d body=%q", response.StatusCode, response.Body)
+	}
+	if proxyHits.Load() != 1 || originHits.Load() != 1 {
+		t.Fatalf("Send: proxy hits=%d origin hits=%d, want 1 each", proxyHits.Load(), originHits.Load())
 	}
 	stream, err := engine.SendStream(context.Background(), request)
 	if err != nil {
@@ -129,6 +188,9 @@ func TestProxyIsUsedBySendAndStream(t *testing.T) {
 	_ = stream.Body.Close()
 	if err != nil || string(payload) != "via-proxy" {
 		t.Fatalf("stream: %q %v", payload, err)
+	}
+	if proxyHits.Load() != 2 || originHits.Load() != 2 {
+		t.Fatalf("SendStream: proxy hits=%d origin hits=%d, want 2 each", proxyHits.Load(), originHits.Load())
 	}
 }
 

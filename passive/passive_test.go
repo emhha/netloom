@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 type countingPlugin struct {

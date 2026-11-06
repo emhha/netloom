@@ -1,20 +1,4 @@
-// Package netrt is a zero-business-dependency network automation runtime.
-//
-// It provides a four-layer architecture for active scanning and probing:
-//
-//	Layer 1 Transport : tlsTransport (optional TLS fingerprint) + rawTransport (malformed bytes)
-//	Layer 2 Pipeline  : onion model Context + Next() + Emit()
-//	Layer 3 Scheduler : bounded worker pool + task queue + rate control
-//	Layer 4 Engine    : facade (Submit/Run/Send/Schedule)
-//
-// netrt is the only component that truly originates outbound connections and
-// therefore carries the network-layer SSRF primitive: the dial guard permanently
-// rejects loopback and link-local targets regardless of any upper-layer scope.
-//
-// netrt originates target HTTP requests, MITM forwarding and future scanning.
-// External API queries (enterprise search, cyberspace
-// mapping) remain with their existing application HTTP clients.
-package netrt
+package netloom
 
 import (
 	"time"
@@ -28,7 +12,7 @@ import (
 // pkg/probe, pkg/dirscan and pkg/fingerprint.
 //
 // Header is a github.com/bogdanfinn/fhttp header (aliased http throughout
-// netrt); net/http is never used on the request path. HeaderOrder carries the
+// netloom); net/http is never used on the request path. HeaderOrder carries the
 // browser header order and is applied via fhttp.HeaderOrderKey so the on-wire
 // order matches the TLS fingerprint.
 type Request struct {

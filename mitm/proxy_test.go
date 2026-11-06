@@ -143,7 +143,7 @@ func TestHTTPSConnectDecryptsAndRestrictsTunnel(t *testing.T) {
 			if err := client.Handshake(); err != nil {
 				t.Fatalf("trusted MITM handshake failed: %v", err)
 			}
-			if client.ConnectionState().PeerCertificates[0].Issuer.CommonName != "netrt MITM CA" {
+			if client.ConnectionState().PeerCertificates[0].Issuer.CommonName != "netloom MITM CA" {
 				t.Fatal("proxy certificate was not presented")
 			}
 			request, err := http.NewRequest("GET", "https://"+host+"/app.js", nil)

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"netrt.local/netrt/httpdata"
-	"netrt.local/netrt/infoextract"
-	"netrt.local/netrt/passive"
+	"github.com/emhha/netloom/httpdata"
+	"github.com/emhha/netloom/infoextract"
+	"github.com/emhha/netloom/passive"
 )
 
 func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {

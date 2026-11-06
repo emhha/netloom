@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var ErrRedirectLimit = errors.New("netrt: redirect limit exceeded")
+var ErrRedirectLimit = errors.New("netloom: redirect limit exceeded")
 
 type Sender interface {
 	Send(context.Context, *Request) (*Response, error)
@@ -41,10 +41,10 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 		return nil, ErrNilRequest
 	}
 	if len(request.Raw) > 0 && policy.Follow {
-		return nil, fmt.Errorf("netrt: raw requests do not support automatic redirects")
+		return nil, fmt.Errorf("netloom: raw requests do not support automatic redirects")
 	}
 	if policy.MaxHops < 0 || policy.MaxHops > 20 {
-		return nil, fmt.Errorf("netrt: max redirects must be between 0 and 20")
+		return nil, fmt.Errorf("netloom: max redirects must be between 0 and 20")
 	}
 	if policy.MaxHops == 0 {
 		policy.MaxHops = 10
@@ -83,7 +83,7 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 			return exchange, err
 		}
 		if response == nil {
-			return exchange, fmt.Errorf("netrt: sender returned no response")
+			return exchange, fmt.Errorf("netloom: sender returned no response")
 		}
 		location := response.Header.Get("Location")
 		if location == "" {
@@ -117,7 +117,7 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 func HTTPURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return nil, fmt.Errorf("netrt: URL must be HTTP/HTTPS without embedded credentials")
+		return nil, fmt.Errorf("netloom: URL must be HTTP/HTTPS without embedded credentials")
 	}
 	return u, nil
 }
@@ -129,7 +129,7 @@ func ResolveRedirect(current, location string) (string, error) {
 	}
 	reference, err := url.Parse(location)
 	if err != nil {
-		return "", fmt.Errorf("netrt: invalid redirect Location: %w", err)
+		return "", fmt.Errorf("netloom: invalid redirect Location: %w", err)
 	}
 	next := base.ResolveReference(reference)
 	next.Fragment, next.RawFragment = "", ""

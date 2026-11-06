@@ -3,7 +3,7 @@ package fingerprint
 import (
 	"strings"
 
-	"netrt.local/netrt/httpdata"
+	"github.com/emhha/netloom/httpdata"
 )
 
 // NewMatchContext builds a MatchContext from a httpdata.Response and a compiled

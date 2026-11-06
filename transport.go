@@ -1,4 +1,4 @@
-package netrt
+package netloom
 
 import (
 	"bufio"
@@ -146,7 +146,7 @@ func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string
 	case "1.1":
 		opts = append(opts, tls_client.WithForceHttp1())
 	default:
-		return nil, nil, fmt.Errorf("netrt: HTTP version must be auto or 1.1")
+		return nil, nil, fmt.Errorf("netloom: HTTP version must be auto or 1.1")
 	}
 
 	if req.Proxy != "" {
@@ -165,7 +165,7 @@ func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("netrt.tlsTransport: new client: %w", err)
+		return nil, nil, fmt.Errorf("netloom.tlsTransport: new client: %w", err)
 	}
 	return client, &connectedIP, nil
 }
@@ -195,7 +195,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	}
 	hreq, err := http.NewRequestWithContext(ctx, method, req.URL, body)
 	if err != nil {
-		return nil, fmt.Errorf("netrt.tlsTransport: build request: %w", err)
+		return nil, fmt.Errorf("netloom.tlsTransport: build request: %w", err)
 	}
 	if req.Header != nil {
 		hreq.Header = req.Header.Clone()
@@ -204,7 +204,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 
 	hresp, err := client.Do(hreq)
 	if err != nil {
-		return nil, fmt.Errorf("netrt.tlsTransport: %w", err)
+		return nil, fmt.Errorf("netloom.tlsTransport: %w", err)
 	}
 	defer func() { _ = hresp.Body.Close() }()
 
@@ -228,7 +228,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	resp.ResponseTime = time.Since(start)
 	if err != nil {
 		resp.Error = err
-		return resp, fmt.Errorf("netrt: read response body: %w", err)
+		return resp, fmt.Errorf("netloom: read response body: %w", err)
 	}
 
 	if hresp.TLS != nil {
@@ -351,7 +351,7 @@ func newRawTransport(maxBody int) *rawTransport {
 
 func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, error) {
 	if req.Proxy != "" {
-		return nil, fmt.Errorf("netrt.rawTransport: proxy is unsupported for raw requests")
+		return nil, fmt.Errorf("netloom.rawTransport: proxy is unsupported for raw requests")
 	}
 	timeout := req.Timeout
 	if timeout <= 0 {
@@ -362,7 +362,7 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	start := time.Now()
 	u, err := url.Parse(req.URL)
 	if err != nil {
-		return nil, fmt.Errorf("netrt.rawTransport: parse url: %w", err)
+		return nil, fmt.Errorf("netloom.rawTransport: parse url: %w", err)
 	}
 	if _, err := HTTPURL(req.URL); err != nil {
 		return nil, err
@@ -407,13 +407,13 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 		}
 		client, cerr := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 		if cerr != nil {
-			return nil, fmt.Errorf("netrt.rawTransport: new client: %w", cerr)
+			return nil, fmt.Errorf("netloom.rawTransport: new client: %w", cerr)
 		}
 		defer client.CloseIdleConnections()
 
 		tlsConn, derr := client.GetTLSDialer()(ctx, "tcp", addr)
 		if derr != nil {
-			return nil, fmt.Errorf("netrt.rawTransport: tls dial: %w", derr)
+			return nil, fmt.Errorf("netloom.rawTransport: tls dial: %w", derr)
 		}
 		conn = tlsConn
 		if uc, ok := tlsConn.(*tls.UConn); ok {
@@ -422,7 +422,7 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	} else {
 		plainConn, derr := guard(ctx, "tcp", addr)
 		if derr != nil {
-			return nil, fmt.Errorf("netrt.rawTransport: dial: %w", derr)
+			return nil, fmt.Errorf("netloom.rawTransport: dial: %w", derr)
 		}
 		conn = plainConn
 	}
@@ -446,7 +446,7 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	defer stop()
 
 	if _, err := conn.Write(req.Raw); err != nil {
-		return nil, fmt.Errorf("netrt.rawTransport: write: %w", err)
+		return nil, fmt.Errorf("netloom.rawTransport: write: %w", err)
 	}
 
 	br := bufio.NewReader(io.LimitReader(conn, int64(t.maxBody)+8192))
@@ -474,7 +474,7 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	resp.ResponseTime = time.Since(start)
 	if err != nil {
 		resp.Error = err
-		return resp, fmt.Errorf("netrt: read raw response: %w", err)
+		return resp, fmt.Errorf("netloom: read raw response: %w", err)
 	}
 	return resp, nil
 }
