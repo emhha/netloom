@@ -213,6 +213,10 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 
 func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response, error) {
 	request := *req
+	request.Network = req.Network.Clone()
+	if _, err := withNetworkOptions(ctx, &request); err != nil {
+		return nil, err
+	}
 	if request.PhaseTimeouts == nil {
 		policy := s.cfg.PhaseTimeouts
 		request.PhaseTimeouts = &policy

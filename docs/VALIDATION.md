@@ -117,3 +117,24 @@ H1/H2/严格 H2 覆盖实际 POST 写完后无响应、103 和不完整最终响
 中间验证发现问题后修复重跑：POST stall 测试服务必须先读完请求体，才能可靠通过服务端 context 观察断连，避免测试 cleanup 停滞；socket deadline 可能先于 context timer 发布 cause，此时记录有效 Total deadline 归属并停止继续重试，避免总预算被误归为 connect/body。该 Total 回归另以 `go test -race . -run '^TestPhase(RawTotal|TimeoutTotal)' -count=15 -timeout=45s` 连续 15 次通过。独立复核还发现 Do 归一化丢失 Canceled 身份、流式旧归一化剥掉阶段包装；最终用例分别验证 errors.Is(Canceled/Deadline/自定义 cause)、errors.As(PhaseError)、部分 Response.Error 和 StreamStatus.Error。
 
 范围限制：本阶段不证明精确纯 TLS 握手测量、HTTP/3、外部网络/代理兼容性、上传 replay、按方法安全重试或性能收益。TLSHandshake 实际覆盖 TLS 至 HTTP-ready/H2 初始化；非零策略只支持直连和 HTTP 代理。Send/Run/Stream 的 Total 不包含初始准入排队；Do 外层预算包含其内部 Send 排队。未运行外部 Cookie 服务、真实付费 API 或远端目标。前面的阶段记录保留历史边界，当前已实现能力以本节及 [API](API.md) 为准。
+
+## 2026-11-07：阶段 3A 直连映射与地址族
+
+工具链：Go 1.26.3 linux/amd64、Python 3.14.8。最终实现执行以下命令，退出码均为 0：
+
+```sh
+go test -race . ./nethttp -run 'Test(Network|BuildRequestNetwork|ConnectionPoolStaleHTTP2)' -count=5 -timeout=90s
+make check && make race && make integration-compile && make integration-local && git diff --check
+```
+
+- 定向 race 连续 5 次通过：根包 5.257s、nethttp 1.046s。独立测试实现还执行映射协议用例 `go test -race . -run '^TestNetworkTransport' -count=5 -timeout=60s`，通过（1.861s）。
+- `make check`：仓库/文档/格式边界、17 个 Python 离线测试、50 个固定字典文件、全包测试、vet、build 通过；根包测试 10.964s。
+- `make race`：全包通过，无已报告数据竞争；根包 12.785s。
+- `make integration-compile`：全部集成用例编译通过；`make integration-local` 本地集成通过（根包 11.008s），明确排除外部 Python Cookie 服务。
+- `git diff --check`：通过。验证记录追加后重新执行文档/格式检查。
+
+真实本地 TLS 服务覆盖 H1/H2/严格 H2、缓冲/流式/Raw 的原始 URL、Host/SNI、验证证书名、实际 IP 与 TLS 证据；错误逻辑证书名在发 HTTP 前失败。无 DNS resolver 夹具检查显式映射无逻辑/替换主机解析及 CNAME 补查；池用两端点验证规范等价策略复用、不同目标/地址族隔离。重定向逐跳重算规则，保留逻辑 URL 校验与跨 origin 授权/Cookie 清理。真实过期 H2 重连另增加映射主机夹具，验证当前租约策略与 TLS 阶段取消。
+
+生产地址保护开启的 planner 测试使用受控本机 UDP DNS 与模拟最终 literal 拨号，检验 family 过滤、IPv4-mapped 规范化、受阻实际 IP、允许 RFC1918、候选顺序/预算/无隐式 DNS 回退。受阻逻辑 IP 在池获取前检查；末尾点等规范等价拼写不绕过保护。独立审查发现末尾点 IP 检查不一致及混合候选错误禁用重试，修复后新增规范逻辑 IP 拦截和两种候选顺序下允许地址临时失败后重试成功回归，再通过上述完整检查。适配输入覆盖 JSON、规则上限/重复/无效字段与深拷贝。
+
+范围限制：仅直连映射，不支持代理端解析/出口 family、自定义 DNS server 配置、Happy Eyeballs 或新 TLS 参数；任何非零策略与代理均明确拒绝。默认 nil/空/auto 保持旧行为。真实证书/协议测试仅测试内部禁用地址类别保护以访问本机，不能据此声称允许生产访问 loopback；保护开启的 DNS/family 验证不向文档地址实际发包。未执行外部 Cookie 服务、远端代理/目标或性能验收。TLS min/max、显式 ServerName 与 pinning 仍属后续阶段 3B。

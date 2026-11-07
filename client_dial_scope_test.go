@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -123,7 +124,7 @@ func (c *stalledTLSConn) Read([]byte) (int, error) {
 
 func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 	for _, stream := range []bool{false, true} {
-		for _, mode := range []string{"request-timeout", "tls-phase", "caller-cancel", "engine-close"} {
+		for _, mode := range []string{"request-timeout", "tls-phase", "mapped-tls-phase", "caller-cancel", "engine-close"} {
 			name := mode
 			if stream {
 				name += "/stream"
@@ -136,7 +137,23 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				server.StartTLS()
 				defer server.Close()
 				e := pooledEngine(t, 1)
-				warm, err := e.Send(context.Background(), &Request{URL: server.URL, HTTPVersion: "2", Timeout: 2 * time.Second})
+				target := server.URL
+				var mapping *NetworkOptions
+				if mode == "mapped-tls-phase" {
+					host, port, err := net.SplitHostPort(server.Listener.Addr().String())
+					if err != nil {
+						t.Fatal(err)
+					}
+					portNumber, err := strconv.Atoi(port)
+					if err != nil {
+						t.Fatal(err)
+					}
+					target = "https://mapped.test"
+					mapping = &NetworkOptions{ConnectTo: []ConnectToRule{{Host: "mapped.test", Port: 443, ConnectHost: host, ConnectPort: portNumber}}}
+					var dns atomic.Int32
+					e.tlsT.(*tlsTransport).resolver = noNetworkDNS(&dns)
+				}
+				warm, err := e.Send(context.Background(), &Request{URL: target, Network: mapping, HTTPVersion: "2", Timeout: 2 * time.Second})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -146,8 +163,8 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				server.CloseClientConnections()
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				req := &Request{URL: server.URL, HTTPVersion: "2", Timeout: 3 * time.Second}
-				if mode == "tls-phase" {
+				req := &Request{URL: target, Network: mapping, HTTPVersion: "2", Timeout: 3 * time.Second}
+				if mode == "tls-phase" || mode == "mapped-tls-phase" {
 					req.PhaseTimeouts = &PhaseTimeouts{TLSHandshake: 80 * time.Millisecond}
 				}
 				if mode == "request-timeout" {
@@ -193,7 +210,7 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				}
 				select {
 				case err := <-done:
-					if mode == "tls-phase" {
+					if mode == "tls-phase" || mode == "mapped-tls-phase" {
 						assertPhaseDeadline(t, err, PhaseTLS)
 					}
 					if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrEngineClosed) {

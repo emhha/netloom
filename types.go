@@ -41,6 +41,9 @@ type Request struct {
 	// SETTINGS, header order). The zero value selects profiles.DefaultClientProfile.
 	Profile profiles.ClientProfile
 
+	// Network changes direct dialing only; nil/zero keeps the default policy.
+	// Logical URL, HTTP Host, TLS SNI and certificate verification stay unchanged.
+	Network *NetworkOptions
 	Proxy   string
 	Timeout time.Duration
 	// PhaseTimeouts overrides the entire Engine phase policy; nil inherits it.

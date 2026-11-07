@@ -69,6 +69,10 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	// Resolve the same request > Engine > default timeout as buffered sends,
 	// without mutating the caller's request. The context covers body reads.
 	requestCopy := *req
+	requestCopy.Network = req.Network.Clone()
+	if _, err := withNetworkOptions(ctx, &requestCopy); err != nil {
+		return nil, err
+	}
 	if requestCopy.PhaseTimeouts == nil {
 		policy := e.cfg.PhaseTimeouts
 		requestCopy.PhaseTimeouts = &policy

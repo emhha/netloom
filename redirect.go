@@ -205,6 +205,7 @@ func cloneRequest(request *Request) *Request {
 	copy.HeaderOrder = append([]string(nil), request.HeaderOrder...)
 	copy.Body = append([]byte(nil), request.Body...)
 	copy.Raw = append([]byte(nil), request.Raw...)
+	copy.Network = request.Network.Clone()
 	return &copy
 }
 

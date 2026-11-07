@@ -36,6 +36,14 @@ go test -race . ./nethttp -run 'Test(Phase|BuildRequestPhase|ConnectionPoolStale
 
 本地 H1/H2/严格 H2 覆盖 POST 后完整响应头超时、103/不完整最终响应头、部分正文 idle 失败与流式 Status、调用方暂停消费不误计 idle、持续进展的正文不被固定 body 时长截断、TLS stall（含大写 HTTPS scheme）、真实过期 H2 重新握手、CONNECT 阻塞后的 socket 关闭与池容量释放。另测连接复用不重新计算 TLS 预算、晚到 WroteRequest 不复活已结束的 header timer、整组策略继承/显式零覆盖、负值和毫秒换算溢出、调用方提前 deadline/取消 cause、Raw TLS/header/body/部分响应，以及 Total 跨重试和 Do 多跳不重置。Connect 的模拟拨号用例检查依赖 Background context 被当前 lease ctx 替换；真实 socket 取消由 TLS/CONNECT 用例检查，不依赖不可控外网黑洞地址。这不是精确 TLS 握手时长、外部代理、浏览器等价性或性能验收。
 
+## 直连映射与地址族回归
+
+```sh
+go test -race . ./nethttp -run 'Test(Network|BuildRequestNetwork|ConnectionPoolStaleHTTP2)' -count=5 -timeout=90s
+```
+
+默认本地测试覆盖规则边界/重复/规范化、完整策略池身份、原始 Host/SNI/证书验证名（H1/H2/严格 H2、缓冲/流式/Raw）、逐跳映射及跨 origin 凭据清理。受控本机 UDP DNS 与模拟最终 literal 拨号检查生产保护开启时的地址族筛选；不向文档专用 IP 建立真实连接。明确映射用 fail-on-DNS resolver 检查不回退解析/CNAME，无候选或 tcp family 冲突不跨族回退；共享 context 预算不被每候选重置。负向用例检查受阻最终地址、规范等价的逻辑 IP 在池前拦截、任何非零策略与代理拒绝，以及跳过受阻邻居不禁止允许地址重试。真实过期 H2 握手增加映射逻辑主机且禁止 DNS 的场景，检查当前租约映射和取消仍生效；这些不证明远端 DNS、代理映射、Happy Eyeballs 或吞吐性能。
+
 ## 并发检查
 
 ```sh

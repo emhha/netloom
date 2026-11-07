@@ -17,6 +17,7 @@ import (
 // cookie/proxy/profile configuration. Busy entries are not eviction candidates.
 type clientKey struct {
 	origin, proxy, version string
+	network                string
 	proxyTimeoutMS         int
 	verify, noGuard        bool
 }
@@ -79,7 +80,14 @@ func (t *tlsTransport) poolKey(req *Request) (clientKey, bool, error) {
 	if version == "" || version == "2" {
 		version = "auto"
 	}
-	key := clientKey{origin: u.Scheme + "://" + u.Host, proxy: req.Proxy, version: version, verify: req.VerifyTLS, noGuard: t.noGuard}
+	plan, err := compileNetworkOptions(req.Network)
+	if err != nil {
+		return clientKey{}, false, err
+	}
+	if plan.enabled() && req.Proxy != "" {
+		return clientKey{}, false, ErrNetworkProxyUnsupported
+	}
+	key := clientKey{origin: u.Scheme + "://" + u.Host, proxy: req.Proxy, version: version, verify: req.VerifyTLS, noGuard: t.noGuard, network: plan.identity}
 	if req.Proxy != "" {
 		key.proxyTimeoutMS = proxyTimeoutMilliseconds(req.Timeout)
 	}
@@ -105,6 +113,9 @@ type clientLease struct {
 func (l *clientLease) release(reuse bool) { l.once.Do(func() { l.done(reuse) }) }
 
 func (t *tlsTransport) acquireClient(ctx context.Context, req *Request) (*clientLease, error) {
+	if err := validateNetworkLogicalTarget(ctx, req, t.noGuard); err != nil {
+		return nil, err
+	}
 	if err := validateHTTPVersion(req.HTTPVersion); err != nil {
 		return nil, err
 	}

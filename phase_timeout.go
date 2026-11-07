@@ -118,6 +118,10 @@ func newPhaseClock(ctx context.Context, req *Request) (context.Context, *phaseCl
 			return ctx, nil, errors.New("netloom: phase timeouts support only direct connections and http:// proxies")
 		}
 	}
+	ctx, err := withNetworkOptions(ctx, req)
+	if err != nil {
+		return ctx, nil, err
+	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	u, _ := url.Parse(req.URL)
 	secure := u != nil && u.Scheme == "https"

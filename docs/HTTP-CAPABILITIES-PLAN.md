@@ -8,7 +8,7 @@
 
 ## 阶段一：结果可靠性（已实现，验证见记录）
 
-本阶段已落地；实际命令与覆盖边界见 [验证记录](VALIDATION.md)。阶段二分批交付，阶段三至五仍是后续计划。普通缓冲请求已补 Timings；Raw 暂保留既有耗时/TLS 字段，缓冲 QueueMS 暂未测量，缺失阶段继续保留 nil。
+本阶段已落地；实际命令与覆盖边界见 [验证记录](VALIDATION.md)。阶段二与阶段 3A 已分批交付，阶段 3B 至五仍是后续计划。普通缓冲请求已补 Timings；Raw 暂保留既有耗时/TLS 字段，缓冲 QueueMS 暂未测量，缺失阶段继续保留 nil。
 
 1. 统一 Send、Run、SendStream 的 timeout 优先级：请求正值覆盖 Engine 配置，配置缺省 10 秒；调用方更早的 context deadline 始终生效。传输层不得用隐式 10 秒总期限覆盖已选配置。固定 TCP 拨号超时暂不扩展为公开阶段参数。
 2. Send、Run 和重定向保留失败前已收到的响应。重试失败返回最近一次非 nil 响应与最终错误，不声称该响应属于最终尝试；不在本阶段改变重试次数或方法策略。
@@ -38,11 +38,16 @@
 
 ## 阶段三：网络映射与 TLS 测试参数
 
-- 显式建模逻辑 URL、拨号地址、Host 与 SNI；支持有界 resolve/connect-to、自定义 DNS 和地址族策略。
-- 逻辑目标和实际地址分别执行策略；代理解析/出口边界明确，不借 Host 绕过校验。
-- TLS min/max、ServerName、必要的 pinning；规定与浏览器 profile 的冲突行为。
+已实现的阶段 3A：
 
-验收：重定向重新校验、DNS rebinding、证书/SNI 不匹配、跨 origin 凭据清理与代理解析均有负向测试。
+- 每请求 NetworkOptions：有界、精确 host+port 的 Resolve/ConnectTo，先替换一次目标、再匹配有效目标 Resolve；IPv4/IPv6/auto 筛选最终候选，顺序尝试且不重置预算。URL、Host、SNI、证书验证名及逻辑 origin 保持不变。
+- 逻辑 URL 的受阻 IP 在租约获取前检查，最终地址在 literal 拨号前校验，避免重复解析 rebinding；不额外解析逻辑 DNS，不执行 CNAME 补充查询。IPv4-mapped 与根点等规范拼写不绕过保护；混合候选不错误禁用允许地址的重试。
+- 普通 H1/H2、严格 H2、流式和 Raw 共用实际拨号策略，真实过期 H2 重连使用当前租约策略。池按整个规范策略隔离；重定向逐跳重算，保留跨逻辑 origin 凭据清理。nethttp 输入校验与深拷贝，默认 nil/空/auto 保留既有行为。
+- 当前明确只支持直连：任何非零策略与代理共用均报 ErrNetworkProxyUnsupported，不声称控制代理端 DNS 或目标地址族；尚未开放公共自定义 DNS server 配置。上述边界及示例见 [API](API.md)。
+
+阶段 3B 与后续网络扩展仍待实现：TLS min/max、显式 ServerName、必要的 pinning 及与浏览器 Profile 的冲突规则；自定义 DNS、代理端映射/解析与出口策略须另行设计，不属于本次交付。
+
+3A 验收覆盖：本地真实协议与原始 TLS 身份、错误证书名、规范策略池隔离、映射重定向及凭据清理、受控 DNS/family、逻辑/实际受阻地址、代理拒绝、无 DNS 回退及 H2 重连取消。实际执行与限制见 [验证记录](VALIDATION.md)。
 
 ## 阶段四：流式上传、会话与认证
 

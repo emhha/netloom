@@ -107,7 +107,7 @@ func (t *tlsTransport) guardDialer() func(ctx context.Context, network, addr str
 // buildClient constructs an immutable-config client, leased to one request at
 // a time. Connection evidence is recorded per request, never in a client closure.
 func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_client.HttpClient, error) {
-	guard := t.guardDialer()
+	guard := mappedDialContext(t.guardDialer(), t.resolver, t.noGuard)
 	dialCapture := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, err := guard(ctx, network, addr)
 		if err != nil {
@@ -372,6 +372,9 @@ func newRawTransport(maxBody int) *rawTransport {
 
 func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response, returnErr error) {
 	if req.Proxy != "" {
+		if _, err := withNetworkOptions(ctx, req); err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("netloom.rawTransport: proxy is unsupported for raw requests")
 	}
 	timeout := req.Timeout
@@ -406,6 +409,9 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response
 	}
 	defer clock.finish()
 	defer func() { returnErr = clock.failure(ctx, returnErr) }()
+	if err := validateNetworkLogicalTarget(ctx, req, t.noGuard); err != nil {
+		return nil, err
+	}
 	scope := &clientDialScope{}
 	scope.begin(ctx)
 	// Stop phase timers before detaching cancellation; finish only after all
@@ -422,7 +428,7 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response
 		guard = guardedDialContext(base, t.resolver)
 	}
 
-	guard = scope.wrapDial(guard)
+	guard = scope.wrapDial(mappedDialContext(guard, t.resolver, t.noGuard))
 	var conn net.Conn
 	var tlsInfo *TLSInfo
 
@@ -586,6 +592,11 @@ func readCappedResult(r io.Reader, max int) ([]byte, bool, error) {
 }
 
 func lookupCNAME(ctx context.Context, r *net.Resolver, host string) string {
+	// Mapping must not trigger a second lookup of the logical origin merely
+	// for enrichment; it may be intentionally absent from local DNS.
+	if plan, _ := ctx.Value(networkPlanKey{}).(*networkPlan); plan.enabled() {
+		return ""
+	}
 	if host == "" || net.ParseIP(host) != nil {
 		return ""
 	}

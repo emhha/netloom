@@ -147,6 +147,12 @@ func BuildRequest(in RequestInput) (*netloom.Request, error) {
 	}
 	request := &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion, FreshConnection: in.FreshConnection,
 		VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}
+	if in.Network != nil {
+		if err := in.Network.Validate(); err != nil {
+			return nil, err
+		}
+		request.Network = in.Network.Clone()
+	}
 	if in.PhaseTimeouts != nil {
 		p := in.PhaseTimeouts
 		for _, ms := range []int64{p.ConnectMS, p.TLSHandshakeMS, p.ResponseHeaderMS, p.BodyIdleMS, p.TotalMS} {

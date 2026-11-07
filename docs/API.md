@@ -41,6 +41,39 @@ Send 对非 GET/HEAD/OPTIONS 方法禁用重试；Run 使用任务调度器的�
 Send、Run、SendStream 的单次尝试总超时仍为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间。TCP 拨号缺省保留 10 秒后备上限；显式正值 PhaseTimeouts.Connect 由该次连接阶段预算接管，不再被固定 10 秒截断。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒；直接调用不创建跨尝试 Total 预算，应由调用方提供 context deadline。不修改调用方 Request；调用期间及未关闭的流存续期间，请求、Profile/TLS 对象应保持不可变。
 SendStream 不重试且不截断正文；有效总超时也覆盖返回响应头之后的正文读取。
 
+### 直连网络映射与地址族
+
+`Request.Network *NetworkOptions` 是每请求策略，没有 Engine 缺省覆盖。nil、空对象和仅 `AddressFamily: "auto"` 保留原先拨号行为。`NetworkOptions.Validate()` 无 IO 地校验整组规则，`Clone()` 深拷贝规则及 IP 列表；Send/Run、SendStream 与重定向会保存独立网络策略快照，调用期间仍不得并发修改输入。
+
+```go
+req := &netloom.Request{
+    URL: "https://service.example/api",
+    VerifyTLS: true,
+    Network: &netloom.NetworkOptions{
+        AddressFamily: netloom.AddressFamilyIPv4,
+        ConnectTo: []netloom.ConnectToRule{{
+            Host: "service.example", Port: 443,
+            ConnectHost: "backend.example", ConnectPort: 8443,
+        }},
+        Resolve: []netloom.ResolveRule{{
+            Host: "backend.example", Port: 8443,
+            Addresses: []string{"192.0.2.10", "192.0.2.11"},
+        }},
+    },
+}
+```
+
+示例使用文档专用地址，调用方必须提供实际允许的目标。其语义是：逻辑地址保持 `service.example:443`，只把 socket 送到 IP 列表的 8443 端口；HTTP Host、TLS SNI、证书验证名、Cookie/origin 与重定向 URL 均不替换。VerifyTLS 仍须显式启用，不因映射而自动开启。Raw 同样只改变 URL 对应 socket，原始 Host 等字节不重写；SendStream 仍不支持 Raw。
+
+- Resolve、ConnectTo 均按主机和端口精确匹配；规则端口与替换端口必须为 1..65535，没有通配符、CIDR、零端口继承或递归替换。先应用一次 ConnectTo，再以有效目标匹配 Resolve；Resolve 不匹配时解析有效目标，而非原始逻辑主机。HTTP/HTTPS 的原始缺省端口分别为 80/443，每次重连、每跳重定向重新匹配。
+- 主机使用 ASCII/punycode 名或无方括号、无 zone 的 IP。名字标签接受 ASCII 字母、数字、连字符及下划线；匹配时忽略大小写与一个末尾根点，IP 规范化并将 IPv4-mapped IPv6 视作 IPv4。启用非零策略时逻辑 URL 主机同样要求 ASCII/punycode，避免与后端 IDNA 转换不一致；不新增 Unicode 自动转换。重复的规范键、重复 IP、无效的未匹配规则也报错。每种规则最多 64 条，每条 Resolve 需 1..16 个 IP literal，不接受地址字段中的 DNS 名。
+- 地址族为 `""`/`"auto"`、`"ipv4"` 或 `"ipv6"`（对应 AddressFamily 常量）。它筛选最终 IP，包括本地 DNS 答案和 Resolve 候选；与 tcp4/tcp6 冲突、筛选后无候选时失败，不回退其他族。候选顺序依次尝试，共享当前 context/Connect 预算，不实现 Happy Eyeballs；匹配 Resolve 的候选失败后不再偷偷回退 DNS。供给的 IP 不计作 DNS 查询时长。
+- 非零策略只支持直连；与任意 Proxy 同时使用均返回可由 `errors.Is` 判断的 `ErrNetworkProxyUnsupported`，即便规则未匹配，也不静默忽略。零策略保留既有代理语义；不宣称支持代理端解析控制、代理出口地址族或公共自定义 DNS server 配置。
+- 生产地址保护继续拒绝 loopback、unspecified、link-local，不将 RFC1918 一概拒绝。逻辑 URL 的受阻 IP（含规范等价拼写）不能借映射绕过；每个最终 literal 在实际拨号前检查，DNS 解析后只拨所选 literal，避免二次解析 rebinding。原始逻辑 DNS 名不会为了校验而额外解析。非零策略关闭 CNAME 补充查询，故 CNAME 留空，不额外泄漏逻辑 DNS 或消耗预算。跳过的受阻候选不把其他允许地址的临时连接失败误判为永久阻止。
+- 连接池按完整规范策略隔离：规则顺序不影响身份，但 Resolve IP 的优先顺序影响；nil/空/auto 等价。即便某条规则当前未匹配，策略不同也不串用连接。重定向仍按逻辑 origin 清理跨域凭据；显式映射可能把同一逻辑 origin 的凭据送往另一实际端点，这是调用方授权范围，尤其须注意关闭证书验证时的风险。映射不授予地址保护豁免。
+
+`nethttp.RequestInput.Network` 接受同名 `network` JSON 对象：`address_family`、`resolve`（host/port/addresses）、`connect_to`（host/port/connect_host/connect_port）。BuildRequest 校验并深拷贝；不承诺 curl 文本的 `--resolve`/`--connect-to` 解析。
+
 ### 阶段超时与总体预算
 
 `Config.PhaseTimeouts PhaseTimeouts` 是 Engine 缺省策略；`Request.PhaseTimeouts *PhaseTimeouts` 为整组覆盖：nil 继承 Engine，非 nil 零值关闭整组额外预算，不按字段合并。各字段是 Go `time.Duration`，零值不启动相应计时器，负值报错；既有单次 Timeout 与调用方更早 deadline 不被延长。阶段策略在实际当前租约上生效，不把不同阶段期限固化进可复用客户端。
