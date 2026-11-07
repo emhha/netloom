@@ -22,6 +22,19 @@ type Request struct {
 	HeaderOrder []string
 	Body        []byte
 
+	// Upload supplies an owned streaming body instead of Body. Raw and Body
+	// are mutually exclusive with Upload. Only explicitly replayable sources
+	// may be reopened for retry, authentication or preserving redirects.
+	Upload *Upload `json:"-"`
+	// Auth configures explicit origin authentication, never proxy credentials.
+	Auth *AuthOptions `json:"-"`
+
+	// CaptureRequestBody limits the upload evidence prefix retained in Response.
+	// Zero disables capture; it never limits bytes sent. Maximum is 1 MiB.
+	CaptureRequestBody int
+	// RetryPolicy overrides the Engine policy; a non-nil zero policy disables retries.
+	RetryPolicy *RetryPolicy `json:"-"`
+
 	// Raw, when non-empty, routes the request through rawTransport: the bytes
 	// are written verbatim over the (TLS) connection, enabling malformed
 	// packets, request smuggling and CRLF injection. URL is then used only to
@@ -66,7 +79,8 @@ type TLSInfo struct {
 
 // Response is the result of a Transport round trip plus Pipeline enrichment.
 type Response struct {
-	Timings        *Timings `json:"timings,omitempty"`
+	Timings        *Timings        `json:"timings,omitempty"`
+	UploadEvidence *UploadEvidence `json:"upload_evidence,omitempty"`
 	RequestHeaders http.Header
 	InitialURL     string
 	Redirects      []RedirectHop

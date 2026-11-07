@@ -56,13 +56,15 @@
 
 3A 验收覆盖：本地真实协议与原始 TLS 身份、错误证书名、规范策略池隔离、映射重定向及凭据清理、受控 DNS/family、逻辑/实际受阻地址、代理拒绝、无 DNS 回退及 H2 重连取消。实际执行与限制见 [验证记录](VALIDATION.md)。
 
-## 阶段四：流式上传、会话与认证
+## 阶段四：流式上传、会话与认证（已实现）
 
 - reader 型上传及流式 multipart：长度、关闭、取消、重放与请求证据上限。
 - 可注入/清空的内存会话，保留按 host 隔离模式与有界生命周期。
-- 可选重试策略与逐次观察、退避；跨重试/重定向的 Total 已在阶段 2B 交付，方法幂等性、body replay 与 Retry-After 仍待此阶段完善。已交付流式正文后不透明重试。
+- 可选 RetryPolicy 与逐次观察、指数退避和有界 Retry-After；Send/Run 统一方法及正文可重放检查。跨尝试/重定向 Total 包含退避，SendStream 不自动重试。
 - 按实际需求增加 Digest 和认证扩展点；挑战轮数、body replay、origin 与敏感信息脱敏明确。
 - 完善普通请求规范化与 Raw 字节保真契约，不为 Raw 放宽常规安全适配。
+
+交付契约：[上传与普通/Raw 边界](REQUEST-BODIES.md)、[有界会话](SESSIONS.md)、[重试与观察](RETRIES.md)、[认证](AUTHENTICATION.md)。本地真实 H1/H2/严格 H2 覆盖流式 multipart、reader 生命周期与重放、认证多轮超时与 origin 清理、会话清理/淘汰后的缓存连接、状态重试/取消和 Raw 字节保真；完整门禁结果见 [验证记录](VALIDATION.md)。不包含磁盘 Cookie、无界缓存、自动 OAuth/企业登录或新增 CLI 全集。
 
 ## 阶段五：按需求扩展
 

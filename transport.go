@@ -2,7 +2,6 @@ package netloom
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,7 +11,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -54,40 +52,27 @@ type tlsTransport struct {
 	// tests can reach a 127.0.0.1 httptest server; production paths never set it.
 	noGuard bool
 
-	// cookieEnabled enables per-host session cookies. Each unique host gets its
-	// own tls-client CookieJar (RFC 6265 semantics are handled by the library),
-	// shared by every concurrent request to that host so login state carries
-	// across hops, retries and worker threads. Jars are never shared between
-	// different hosts, so scanning many targets cannot leak cookies across
-	// sites. When nil (the default) clients are built without a jar, matching
-	// the previous stateless behaviour exactly.
+	// cookies is a bounded, concurrency-safe host-isolated memory session.
+	// Nil retains stateless behavior. Clients hold a dynamic facade rather than
+	// an underlying host jar, so reuse cannot resurrect cleared/evicted state.
 	cookies        *cookieStore
 	pool           *clientPool
 	defaultProfile profiles.ClientProfile
-}
-
-// cookieStore owns the per-host CookieJar map and its guard mutex. It is a
-// separate heap object so a tlsTransport can be cheaply cloned for tests (the
-// clone shares the store instead of copying a lock).
-type cookieStore struct {
-	mu   sync.Mutex
-	jars map[string]tls_client.CookieJar
 }
 
 func newTLSTransport(maxBody int) *tlsTransport {
 	return newTLSTransportWithJar(maxBody, false)
 }
 
-// newTLSTransportWithJar builds a tlsTransport. When enabled, per-host cookie
-// jars are created lazily on first request to each host and kept for the
-// transport's lifetime.
+// newTLSTransportWithJar builds a tlsTransport. The legacy cookie opt-in creates
+// a private bounded Session with default limits. Config.Session may replace it.
 func newTLSTransportWithJar(maxBody int, cookieEnabled bool) *tlsTransport {
 	if maxBody <= 0 {
 		maxBody = defaultMaxBodySize
 	}
 	t := &tlsTransport{maxBody: maxBody, resolver: net.DefaultResolver, defaultProfile: cloneClientProfile(profiles.DefaultClientProfile)}
 	if cookieEnabled {
-		t.cookies = &cookieStore{jars: make(map[string]tls_client.CookieJar)}
+		t.cookies, _ = NewSession(SessionConfig{})
 	}
 	return t
 }
@@ -210,7 +195,12 @@ func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hre
 		}
 		req = &requestCopy
 	}
-	response, err := doHTTPRequest(client, req, hreq)
+	// Replay belongs to the SDK scheduler/auth/redirect policy, not fhttp.Client.
+	// Its redirect machinery otherwise eagerly calls GetBody even when the
+	// CheckRedirect hook rejects following, consuming an extra opener on 307.
+	wire := *hreq
+	wire.GetBody = nil
+	response, err := doHTTPRequest(client, req, &wire)
 	if err == nil && response != nil {
 		enterPhase(hreq.Context(), PhaseBody)
 	}
@@ -240,33 +230,31 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	defer func() { clock.stop(); lease.release(reusable) }()
 	client := lease.client
 
-	method := req.Method
-	if method == "" {
-		method = http.MethodGet
-	}
-
-	var body io.Reader
-	if len(req.Body) > 0 {
-		body = bytes.NewReader(req.Body)
-	}
-	hreq, err := http.NewRequestWithContext(ctx, method, req.URL, body)
+	hreq, err := buildWireRequest(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("netloom.tlsTransport: build request: %w", err)
 	}
-	if req.Header != nil {
-		hreq.Header = req.Header.Clone()
+	if hreq.Body != nil {
+		defer func() { _ = hreq.Body.Close() }()
 	}
-	applyHeaderOrder(hreq, req.HeaderOrder)
-
-	hresp, err := t.doRequest(client, req, hreq)
-	if err != nil {
-		return nil, fmt.Errorf("netloom.tlsTransport: %w", err)
+	var capture *captureUpload
+	rounds := 0
+	hresp, requestErr := doAuthenticatedRequest(ctx, req, hreq, func(next *http.Request) (*http.Response, error) {
+		if rounds > 0 {
+			clock.restart()
+		}
+		rounds++
+		capture = captureWireUpload(next, req.CaptureRequestBody)
+		return t.doRequest(client, req, next)
+	})
+	if hresp == nil {
+		return nil, fmt.Errorf("netloom.tlsTransport: %w", requestErr)
 	}
 	hresp.Body = wrapPhaseBody(ctx, hresp.Body)
 	defer func() { _ = hresp.Body.Close() }()
 
 	resp := &Response{
-		RequestHeaders: hreq.Header.Clone(),
+		RequestHeaders: safeRequestHeaders(hreq.Header),
 		StatusCode:     hresp.StatusCode,
 		Header:         hresp.Header,
 		ResponseTime:   time.Since(start),
@@ -283,6 +271,12 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 
 	headersAt := time.Now()
 	resp.Body, resp.BodyTruncated, err = readCappedResult(hresp.Body, t.maxBody)
+	if capture != nil {
+		resp.UploadEvidence = capture.snapshot()
+	}
+	if err == nil {
+		err = requestErr
+	}
 	finishedAt := time.Now()
 	resp.ResponseTime = finishedAt.Sub(start)
 	timing, actualTLS := observation.snapshot()
@@ -315,9 +309,8 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	return resp, nil
 }
 
-// jarFor returns the shared per-host CookieJar for req, or nil when per-host
-// cookies are disabled. It lazily creates a jar on first contact with a host.
-// The returned jar is safe for concurrent use (tls-client jar owns an RWMutex).
+// jarFor returns a stable, dynamic session facade, or nil when disabled.
+// No underlying host jar is retained by a client across Clear/expiry/eviction.
 func (t *tlsTransport) jarFor(req *Request) tls_client.CookieJar {
 	if t.cookies == nil {
 		return nil
@@ -326,18 +319,11 @@ func (t *tlsTransport) jarFor(req *Request) tls_client.CookieJar {
 	if err != nil {
 		return nil
 	}
-	key := hostKey(req.URL)
+	key := sessionHostKey(u)
 	if key == "" {
-		key = u.Host
+		return nil
 	}
-	t.cookies.mu.Lock()
-	defer t.cookies.mu.Unlock()
-	jar, ok := t.cookies.jars[key]
-	if !ok {
-		jar = tls_client.NewCookieJar()
-		t.cookies.jars[key] = jar
-	}
-	return jar
+	return &sessionJar{session: t.cookies, host: key}
 }
 
 // roundTripNoGuard is a test helper that bypasses the dial guard so loopback

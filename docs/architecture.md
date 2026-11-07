@@ -35,6 +35,8 @@ geoip / mitm ──────────────────────�
 
 ## 生命周期与调用方责任
 
+根包的 Upload/Multipart 仅管理显式 reader 的懒打开/关闭和重放能力；不会为了重试缓存任意正文。RetryPolicy 共享 Send/Run 的尝试决策，Auth 在单次尝试内进行有界 origin 挑战；不让第三方客户端隐式打开额外重放源。Session 是可注入、host 隔离、有界且可清理的内存状态，缓存连接使用动态 facade，不持有已淘汰 jar。Raw 不进入这些普通请求变换。
+
 Engine 管理请求、队列、活动流和取消；调用方管理 Engine 的创建与关闭。流式响应体必须关闭，Pipeline 不得在自己的工作线程内同步关闭所属 Engine。具体零值、背压和关闭约束由 [API 与配置](API.md) 定义。
 
 MITM 提供 CA、CONNECT、转发和观察原语，不自动启动监听或安装系统证书。GeoIP 读取明确指定的资源目录，只有显式 Update 才下载。SDK 不提供数据库、ORM、Web 服务、后台任务系统或流量/凭据持久化。

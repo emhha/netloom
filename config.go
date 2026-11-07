@@ -18,21 +18,25 @@ type Config struct {
 	Delay         time.Duration
 
 	// Retry / fault tolerance.
-	Retries       int // retries on network error/timeout (default 2); 4xx/5xx never retried
-	MaxHostErrors int // consecutive per-host error cap (default 30); host skipped after
+	Retries       int          // legacy safe-method network retries (default 2); overridden by RetryPolicy
+	RetryPolicy   *RetryPolicy // opt-in status/backoff/observer policy; copied by New
+	MaxHostErrors int          // consecutive per-host error cap (default 30); host skipped after
 
 	// Timeout / body limits.
 	Timeout       time.Duration // per-request timeout (default 10s)
 	PhaseTimeouts PhaseTimeouts // optional HTTP phase and cross-attempt budgets
 	MaxBodySize   int           // max body bytes read (default 2MB); excess discarded
 
-	// CookieJar enables per-host session cookies. Each unique host gets its own
-	// jar shared across requests, so Set-Cookie is honoured for redirects,
-	// retries and concurrent requests to the same host, while cookies never
-	// leak between different hosts. Default false: stateless requests, exactly
-	// the historical behaviour. rawTransport is unaffected (it writes raw
-	// bytes, not through the fhttp client).
+	// CookieJar opts into a private bounded memory cookie Session with default
+	// limits, isolated by logical hostname plus explicit port. Default false
+	// preserves stateless behavior when Session is also nil. Raw is unaffected.
 	CookieJar bool
+
+	// Session injects a caller-owned, concurrency-safe memory cookie session.
+	// Non-nil enables cookies regardless of CookieJar and takes precedence over
+	// its private default session. Multiple Engines may share it; Engine.Close
+	// does not clear it. No persistence or implicit credential/file discovery.
+	Session *Session
 
 	// ConnectionPool opts into bounded, origin-scoped client reuse. Nil retains
 	// the historical fresh-client-per-attempt behavior. See ConnectionPoolConfig.

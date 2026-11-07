@@ -6,6 +6,10 @@
 - [安装与使用](MIGRATION.md)：模块安装、导入和生命周期。
 - [示例](../examples/README.md)：请求、流式与 Pipeline。
 - [API 与配置](API.md)：核心默认值、所有权、背压和扩展契约。
+- [流式上传与请求契约](REQUEST-BODIES.md)：reader/multipart、重放、有界证据及普通/Raw 边界。
+- [内存会话](SESSIONS.md)：注入、host 隔离、容量/过期和清理。
+- [重试与观察](RETRIES.md)：方法安全、退避、Retry-After 和 attempt 回调。
+- [认证](AUTHENTICATION.md)：Basic/Digest、挑战扩展及凭据边界。
 - [升级说明](UPGRADING.md)：公开导入路径与可见行为变化。
 
 ## 架构与开发

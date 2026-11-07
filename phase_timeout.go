@@ -108,6 +108,9 @@ type phaseClock struct {
 }
 
 func newPhaseClock(ctx context.Context, req *Request) (context.Context, *phaseClock, error) {
+	if err := validateRequestBody(req); err != nil {
+		return ctx, nil, err
+	}
 	if err := validateTLSRequest(req); err != nil {
 		return ctx, nil, err
 	}
@@ -174,6 +177,22 @@ func (p *phaseClock) enter(phase Phase) {
 			}
 		})
 	}
+}
+
+// restart begins another bounded authentication exchange inside the same
+// attempt context. It never extends the request Timeout or outer Total budget.
+func (p *phaseClock) restart() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.stopped {
+		return
+	}
+	p.generation++
+	if p.timer != nil {
+		p.timer.Stop()
+		p.timer = nil
+	}
+	p.phase = PhasePool
 }
 func (p *phaseClock) stop() {
 	p.mu.Lock()

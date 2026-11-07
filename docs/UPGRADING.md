@@ -15,6 +15,12 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 ### 默认值与可见行为
 
+- 阶段四新增 Request.Upload/NewUpload/NewReplayableUpload/NewMultipartUpload、CaptureRequestBody/UploadEvidence、Config.Session/NewSession、Config/Request.RetryPolicy 和 Request.Auth/ChallengeAuthenticator。详细生命周期分别见 [上传](REQUEST-BODIES.md)、[会话](SESSIONS.md)、[重试](RETRIES.md)、[认证](AUTHENTICATION.md)；不引入文件路径、隐式持久化或新的 CLI 选项全集。
+- Send 与 Run 统一默认只重试 GET/HEAD/OPTIONS 网络错误，修复过去 Run 会重试有副作用方法的不一致；Raw 不再透明重试。显式 RetryPolicy 可放开方法/状态，不能放开不可重放正文。nil 继承，非 nil 零策略禁用，优先于 legacy Retries。
+- legacy CookieJar=true 改用有界且遵守 Secure/Path/Domain/Expiry 的存储，默认256host/64cookie/30分钟 host idle；过去忽略 cookie path/secure 的行为不再兼容。显式 Config.Session 可跨 engine 共享，Clear 不撤回已发头且进行中的 Set-Cookie 可能再次填入。清理/淘汰后的缓存连接不持有旧 jar。
+- 普通 native 请求现提前拒绝头部控制字节、无效字段名、大小写重复字段名、歧义 Host/Content-Length、手动 Transfer-Encoding，以及非 HTTP(S)/带 userinfo 的 URL。需要异常字节请求须显式 Raw，仍不得绕过地址/代理等安全限制。Response.RequestHeaders 的 Authorization/Proxy-Authorization/Cookie 改为 [REDACTED]；授权证据请调用方自行管理，而不是依赖诊断头保存凭据。
+- 新增 ErrBodyNotReplayable/ErrUploadLength 及 ErrAuthOptions/ErrAuthChallenge/ErrAuthUnsupported，可经 errors.Is 判断；认证扩展自定义错误不回显凭据。最终401仍是正常响应；流式认证错误不返回未关闭的活跃响应流。
+
 - 根包 `Request.VerifyTLS` 默认 false，验证证书须显式启用。`Config.Retries=0` 表示默认重试两次，负数禁用重试；路径调整不改变这些行为。
 - Send/Run 的配置超时不再被底层隐式 10 秒总期限覆盖；SendStream 现在也遵守 Config.Timeout。优先级为正值 Request.Timeout > Config.Timeout > 默认 10 秒，调用方更早的 context deadline 仍有效。TCP 拨号缺省保留 10 秒后备上限，显式 PhaseTimeouts.Connect 正值可接管该上限。
 - Send 在失败时可同时返回非 nil Response 与 error；Run 失败结果保留已收到的 headers/body。重试耗尽时响应是最近一次非 nil 证据，错误为最终失败原因，可能来自不同尝试；调用方必须检查 error，不将部分正文当作成功。

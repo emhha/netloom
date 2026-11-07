@@ -138,10 +138,14 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 		next := cloneRequest(current)
 		next.URL = nextURL
 		if response.StatusCode == 303 && current.Method != "HEAD" || (response.StatusCode == 301 || response.StatusCode == 302) && current.Method == "POST" {
-			next.Method, next.Body = "GET", nil
+			next.Method, next.Body, next.Upload = "GET", nil, nil
 			deleteHeaders(next, "Content-Type", "Content-Length", "Content-Encoding", "Transfer-Encoding")
 		}
+		if next.Upload != nil && !next.Upload.replayable {
+			return exchange, ErrBodyNotReplayable
+		}
 		if !SameOrigin(current.URL, nextURL) {
+			next.Auth = nil
 			next.TLSConfig = nil // client identity and custom trust are origin-scoped
 			deleteHeaders(next, "Authorization", "Proxy-Authorization", "Cookie", "Host", "Origin", "Referer", "X-Api-Key", "X-Auth-Token")
 		}
@@ -207,6 +211,8 @@ func cloneRequest(request *Request) *Request {
 	copy.Raw = append([]byte(nil), request.Raw...)
 	copy.Network = request.Network.Clone()
 	copy.TLSConfig = request.TLSConfig.Clone()
+	copy.Auth = request.Auth.Clone()
+	copy.RetryPolicy = request.RetryPolicy.Clone()
 	return &copy
 }
 

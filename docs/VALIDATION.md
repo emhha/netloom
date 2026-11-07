@@ -162,3 +162,34 @@ HTTP CONNECT 验证实际 origin TLS 版本/名称与正确/错误 pin；Raw 仍
 中间验证中的 Raw CONNECT 正向用例错误假设新增代理支持，改为保留既有拒绝边界并检查零连接；策略单元测试也发现内建 ID 可能携带返回错误的占位 SpecFactory，已修复为与 uTLS 相同的 factory-to-built-in 回退并重跑。最终完整检查没有跳过上述本地回归。
 
 范围限制：不证明 TLS1.0/1.1 在默认 Profile 可用，不承诺改变版本范围后浏览器指纹等价、HTTP/3 或外部代理/目标兼容性；新控制仅 HTTPS 直连/HTTP CONNECT，Raw 仍无代理。显式 DNS ServerName+无 SNI Profile 冲突在 HTTP 应用字节前失败，但可能已经建立 TCP/CONNECT；只有语法、显式 Profile+版本和空版本交集等提前检查保证不拨号。普通/流式使用有界客户端租约，Raw 保留独立 socket 生命周期。未执行外部 Cookie 服务、远端代理、付费服务或性能验收。
+
+## 2026-11-07：阶段四上传、会话、重试与认证
+
+工具链仍为 Go 1.26.3 linux/amd64、Python 3.14.8。执行并通过：
+
+```sh
+make check
+make race && make integration-compile && make integration-local
+git diff --check
+```
+
+- `make check`：格式、仓库/文档检查、17个 Python 离线测试、50个固定字典文件校验、全包单测/vet/build 通过；根包16.304s。
+- `make race`：全包通过，根包19.337s，无已报告数据竞争。
+- `make integration-compile`：所有集成用例编译通过。
+- `make integration-local`：本地集成真实执行通过，根包16.230s；明确排除外部 Python Cookie 服务。
+- 追加记录后重新执行文档/格式及 whitespace 检查。
+
+定向测试也单独通过：上传与重试 race5轮、普通头部/Raw/上传/重试 race3轮、multipart和nethttp适配 race5轮、会话 race3轮、认证 race3轮。测试仅使用本地受控服务器、内存源和 fake transport。
+
+覆盖要点：
+
+- reader 已知/未知/零长度与短读/前缀限制，H1/H2/严格H2 × buffer/stream 实际发送；取消中断阻塞源、close-once与池单槽恢复，one-shot并发领取/重复使用和预检不消耗源。typed-nil 源/工厂返回值提前报错而非 panic；上传捕获默认关闭，有界前缀且无额外读取。
+- 流式 multipart 实际协议矩阵解析、固定 boundary、已知长度精确计算/溢出、未知长度分块、懒打开、多个 part 顺序关闭、生产者/源错误及取消。部分元数据和数量有界，无隐式文件读入或任意正文缓存。
+- 会话真实连接复用、共享Engine、Clear/ClearHost、LRU/TTL、port隔离、Secure/Path/Domain/公开后缀/到期/删除、并发清理和在途Set-Cookie再填入。清理/淘汰后的缓存客户端不能继续使用旧jar。
+- 状态503重试与 POST显式允许/不可重放抑制、Send/Run默认方法一致、Retry-After裁剪、Total中断退避保留429证据、attempt次数和流式仅一次观察。
+- Basic/Digest真实TLS覆盖H1/H2/严格H2、buffer/stream、TLS控制开/关；六种算法与sess/no-qop、stale/挑战上限、有界解析和扩展错误脱敏。上传认证重放精确开关次数、one-shot保留401证据/归还租约、同/跨origin Do清理；第二轮headers阻塞/自定义取消cause保留PhaseError、关闭实际socket并回收池槽。
+- 普通头部/framing/URL拒绝发生在打开源之前，Host与URL身份分离，敏感诊断头脱敏；Raw异常字段大小写/重复头和字节原样发送，不受普通规范化或状态重试影响。
+
+中间回归发现 fhttp 即使配置不跟随跳转，仍在307/308的拒绝回调之前提前调用GetBody，多开一次源；现发送给后端的wire副本不暴露GetBody，显式认证/调度/Do保留原始重放能力，相应用例重跑通过。认证网络错误同时遇到context结束时也保留原有PhaseError与取消cause，而非丢失阶段。
+
+范围限制：不执行外部Cookie服务、远端代理/付费API、真实登录或性能验收；不证明跨浏览器SameSite导航语义、Digest rspauth/auth-int/nonce缓存、企业认证或OAuth生命周期。自定义reader/opener/认证扩展必须遵守context与Close契约，SDK不能强制终止不合作的调用方代码；捕获的请求正文可能包含敏感数据，默认不启用。阶段五仍未实施。

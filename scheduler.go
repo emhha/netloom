@@ -215,6 +215,17 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 	request := *req
 	request.Network = req.Network.Clone()
 	request.TLSConfig = req.TLSConfig.Clone()
+	request.Auth = req.Auth.Clone()
+	request.RetryPolicy = req.RetryPolicy.Clone()
+	if request.RetryPolicy == nil {
+		request.RetryPolicy = s.cfg.RetryPolicy.Clone()
+	}
+	if err := request.RetryPolicy.Validate(); err != nil {
+		return nil, err
+	}
+	if err := validateRequestBody(&request); err != nil {
+		return nil, err
+	}
 	if err := validateTLSRequest(&request); err != nil {
 		return nil, err
 	}
@@ -243,7 +254,16 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 	tr := route(req, s.tlsT, s.rawT)
 	var lastErr error
 	var lastResponse *Response
-	for attempt := 0; attempt <= s.cfg.Retries; attempt++ {
+	policy := req.RetryPolicy
+	retries := s.cfg.Retries
+	if policy != nil {
+		retries = policy.MaxRetries
+	}
+	if !retryMethodAllowed(policy, req.Method) || !replayableBody(req) || len(req.Raw) > 0 {
+		retries = 0
+	}
+	for attempt := 0; attempt <= retries; attempt++ {
+		started := time.Now()
 		rctx := ctx
 		var cancel context.CancelFunc
 		timeout := s.cfg.Timeout
@@ -257,7 +277,24 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 		if cancel != nil {
 			cancel()
 		}
-		if err == nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		permanent := permanentRetryError(err) || errors.Is(err, ErrBlockedAddress) || errors.Is(err, ErrTLSPinMismatch) || errors.Is(err, ErrTLSProfileConflict) || errors.Is(err, ErrTLSOptionsUnsupported) || errors.Is(err, ErrBodyNotReplayable) || errors.Is(err, ErrUploadLength) || errors.Is(err, ErrAuthOptions) || errors.Is(err, ErrAuthChallenge) || errors.Is(err, ErrAuthUnsupported)
+		willRetry := attempt < retries && !permanent && requestContextError(ctx) == nil && (err != nil || retryStatusAllowed(policy, status))
+		delay := time.Duration(0)
+		if willRetry {
+			delay = retryDelay(policy, attempt, resp)
+		}
+		if policy != nil && policy.Observer != nil {
+			method := req.Method
+			if method == "" {
+				method = "GET"
+			}
+			policy.Observer(AttemptInfo{Attempt: attempt + 1, Method: method, StatusCode: status, Error: err, Duration: time.Since(started), WillRetry: willRetry, Delay: delay})
+		}
+		if err == nil && !willRetry {
 			return resp, nil
 		}
 		// A later attempt may fail before headers; retain the last captured evidence.
@@ -265,7 +302,7 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 			lastResponse = resp
 		}
 		// Blocked addresses are permanent; never retry.
-		if errors.Is(err, ErrBlockedAddress) || errors.Is(err, ErrTLSPinMismatch) || errors.Is(err, ErrTLSProfileConflict) || errors.Is(err, ErrTLSOptionsUnsupported) {
+		if permanent {
 			return lastResponse, err
 		}
 		lastErr = err
@@ -278,6 +315,12 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 				return lastResponse, err
 			}
 			return lastResponse, cause
+		}
+		if !willRetry {
+			return lastResponse, err
+		}
+		if err := waitRetry(ctx, delay); err != nil {
+			return lastResponse, err
 		}
 	}
 	return lastResponse, lastErr

@@ -28,18 +28,29 @@ RequestInput 的 FollowRedirects/MaxRedirects、Stream、MaxResponseBytes 是调
 | RatePerSecond | 150，非正数会补默认值 |
 | RatePerMinute | 0 不限，与秒级限流同时生效 |
 | Delay | 0；请求开始前额外延迟 |
-| Retries | 0 补 2，负数禁用；网络错误可重试，HTTP 错误状态不重试 |
+| Retries | 0 补 2，负数禁用；仅 GET/HEAD/OPTIONS 网络错误，HTTP 错误状态不重试；被 RetryPolicy 覆盖 |
+| RetryPolicy | nil 使用上述兼容策略；非 nil 显式启用策略，零对象禁用重试 |
 | MaxHostErrors | 30，Run 的主机错误阈值 |
 | Timeout | 10 秒，单次尝试（保留既有优先级） |
 | PhaseTimeouts | 零值关闭额外阶段/跨尝试预算；负值令 New 报错，见下文 |
 | MaxBodySize | 2 MiB，缓冲响应上限 |
-| CookieJar | false；开启后按主机隔离并共享 |
+| CookieJar | false；开启且未注入 Session 时创建私有有界会话 |
+| Session | nil；非 nil 显式启用并共享调用方内存会话（不要求 CookieJar=true） |
 | ConnectionPool | nil；保留每次尝试新建客户端。非 nil 显式启用有界复用，见下文 |
 
 根包 Request.VerifyTLS 默认 false；调用方应显式选择。自定义根和客户端证书不改变该开关。
-Send 对非 GET/HEAD/OPTIONS 方法禁用重试；Run 使用任务调度器的重试策略，调用方应对具有副作用的任务设置 Retries=-1。
+Send 与 Run 现在统一采用方法/正文重放检查，缺省仅 GET/HEAD/OPTIONS；Raw 和 one-shot Upload 不自动重试。显式 RetryPolicy 可以选择其他方法和状态，但不能越过正文可重放限制。完整退避/观察契约见 [重试说明](RETRIES.md)。
 Send、Run、SendStream 的单次尝试总超时仍为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间。TCP 拨号缺省保留 10 秒后备上限；显式正值 PhaseTimeouts.Connect 由该次连接阶段预算接管，不再被固定 10 秒截断。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒；直接调用不创建跨尝试 Total 预算，应由调用方提供 context deadline。不修改调用方 Request；调用期间及未关闭的流存续期间，请求、Profile/TLS 对象应保持不可变。
 SendStream 不重试且不截断正文；有效总超时也覆盖返回响应头之后的正文读取。
+
+### 上传、会话、认证与请求规范化
+
+- `Request.Upload` 与 bytes Body 二选一；使用 NewUpload/NewReplayableUpload 创建源，使用 NewMultipartUpload 创建懒读取 multipart。长度/关闭/取消/重放、CaptureRequestBody（默认0、最大1 MiB）及 Response.UploadEvidence 见 [上传说明](REQUEST-BODIES.md)。离线转换不打开或复制 reader 内容。
+- `Config.Session` 支持显式注入共享 Session；默认256主机、每主机64cookie、空闲30分钟，支持 Clear/ClearHost 和 RFC path/secure/expiry。legacy CookieJar=true 也使用有界存储；不持久化。详见 [会话说明](SESSIONS.md)。
+- `Request.Auth` 显式选择 Basic/Digest 或原生 ChallengeAuthenticator 扩展。挑战轮数有限，保留正文需可重放，凭据只限当前 origin；错误凭据的最终401仍是正常 HTTP 响应。详见 [认证说明](AUTHENTICATION.md)。
+- 普通请求拒绝无效头字段/控制字节/大小写重复字段名/歧义 framing，Content-Length 必须匹配已知源，Transfer-Encoding 由 transport 控制。Host 不改变 URL、dial、SNI 或 origin。RequestHeaders 的 Authorization/Proxy-Authorization/Cookie 脱敏；显式上传证据仍可能包含秘密。
+- Raw 原样发送调用方字节，不应用上传、CookieJar、认证、重试或自动重定向；仍保留地址/代理/阶段超时等安全边界。不提供 reader/path JSON 反序列化，也不扩大 curl CLI 支持范围。
+- `nethttp.RequestInput` 提供 `auth`、`retry`、`capture_request_body` 结构化字段，native-only Upload/StreamingMultipart 使用 json:"-"；既有 BasicAuth 保持兼容，但不能同时提供 Auth。毫秒退避参数、冲突及安全校验见上述所属说明。
 
 ### TLS 版本、身份与公钥 pinning
 
@@ -168,14 +179,14 @@ engine, err := netloom.New(netloom.Config{
 - 首版只缓存没有显式 Profile、TLSConfig=nil，且直连或使用 `http://` 代理的请求。其他代理 scheme 使用一次性租约，不缓存第三方后端的 H2 重连状态。nethttp.BuildRequest 的空 TLSProfile 保留零 Profile，使用 Engine 的默认快照；非空名称会显式选择 Profile，因此走一次性租约。默认 Profile 在传输初始化时复制集合并固定；显式/自定义 Profile、任意非 nil TLSConfig（含自定义信任根或 mTLS）和 `2-only` 使用同一容量约束下的一次性租约，不依据不完整的指纹标签、证书指针或私钥散列复用。Profile 的工厂/闭包及调用方提供的 TLS 对象仍必须保持不可变，禁止并发修改。
 - `Request.FreshConnection=true`（输入适配器同名字段）禁止该次尝试借用空闲客户端，并在完成后关闭；仍受容量、代理和拨号安全策略约束，不清空其他请求的空闲池。
 - IdleTimeout 用于后端空闲 socket 回收及下次获取时的过期条目清理；不启动后台清理服务。成功且完整采集的缓冲请求、观察 EOF 后正常 Close 的流可归还缓存；正文截断、读取失败和流提前关闭会丢弃客户端。EOF 后必须 Close 才归还租约，取消/context 到期或 Engine.Close 也会释放租约。
-- CookieJar 保留原来的 host（含显式端口）会话隔离；LRU 驱逐客户端不会清空 Cookie。Cookie jar 存储与客户端池独立，目前没有独立容量限制，不能将 MaxClients 当作全部会话内存上限。Raw 不使用此池。
+- CookieJar 保留 host（含显式端口）会话隔离；客户端池 LRU 驱逐不会清空 Cookie。Session 存储与客户端池独立，由 SessionConfig 的 host/cookie/idle 限制控制；不能将 MaxClients 当作全部会话内存上限。Raw 不使用此池。
 - 直连及 HTTP CONNECT 的底层连接按当前独占租约绑定 context，覆盖第三方 H2 后台重连的 TCP/TLS/初始化；请求结束成功归还前解除旧取消回调，避免一次请求取消误关后续租约。过期 H2 连接重拨不会获得脱离请求预算的后台握手。
 - 复用响应仍从实际连接读取 TLS/IP，不复制上次的 DNS/Connect/TLS timings；复用时没有发生的阶段保持 nil。代理路径不将代理 TCP peer 冒充目标出口 IP。
 
 ### 失败与部分响应
 
 Send/Transport.RoundTrip 可同时返回非 nil Response 和非 nil error。状态码、headers 和已读正文仍是有效的部分证据，不能因 error 丢弃，也不能将它视为完整成功。BodyTruncated 仅表示大小上限导致的主动截断；读取失败由 error/Response.Error 表示。
-重试失败保留最近一次非 nil 响应，返回的 error 是最终失败原因，两者可能来自不同尝试；本阶段不提供逐次尝试历史。Run 失败时同样保留证据，并将最终错误写入 Response.Error，不执行成功分析 Pipeline。重定向 Do 也会保留发送方返回的部分响应。
+重试失败保留最近一次非 nil 响应，返回的 error 是最终失败原因，两者可能来自不同尝试；逐次观察可显式配置 RetryPolicy.Observer，不自动无限保留尝试历史。Run 失败时同样保留证据，并将最终错误写入 Response.Error，不执行成功分析 Pipeline。重定向 Do 也会保留发送方返回的部分响应。
 
 ### 实际连接诊断
 

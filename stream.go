@@ -1,7 +1,6 @@
 package netloom
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -71,6 +70,17 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	requestCopy := *req
 	requestCopy.Network = req.Network.Clone()
 	requestCopy.TLSConfig = req.TLSConfig.Clone()
+	requestCopy.Auth = req.Auth.Clone()
+	requestCopy.RetryPolicy = req.RetryPolicy.Clone()
+	if requestCopy.RetryPolicy == nil {
+		requestCopy.RetryPolicy = e.cfg.RetryPolicy.Clone()
+	}
+	if err := requestCopy.RetryPolicy.Validate(); err != nil {
+		return nil, err
+	}
+	if err := validateRequestBody(&requestCopy); err != nil {
+		return nil, err
+	}
 	if err := validateTLSRequest(&requestCopy); err != nil {
 		return nil, err
 	}
@@ -129,30 +139,46 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 			lease.release(false)
 		}
 	}()
-	method := req.Method
-	if method == "" {
-		method = "GET"
-	}
-	request, err := http.NewRequestWithContext(ctx, method, req.URL, bytes.NewReader(req.Body))
+	request, err := buildWireRequest(ctx, req)
 	if err != nil {
 		release()
 		return nil, err
 	}
-	request.Header = req.Header.Clone()
-	if request.Header == nil {
-		request.Header = make(http.Header)
+	if request.Body != nil {
+		defer func() { _ = request.Body.Close() }()
 	}
-	applyHeaderOrder(request, req.HeaderOrder)
-	response, err := transport.doRequest(client, req, request)
+	var capture *captureUpload
+	rounds := 0
+	response, err := doAuthenticatedRequest(ctx, req, request, func(next *http.Request) (*http.Response, error) {
+		if rounds > 0 {
+			clock.restart()
+		}
+		rounds++
+		capture = captureWireUpload(next, req.CaptureRequestBody)
+		return transport.doRequest(client, req, next)
+	})
+	if p := req.RetryPolicy; p != nil && p.Observer != nil {
+		status := 0
+		if response != nil {
+			status = response.StatusCode
+		}
+		p.Observer(AttemptInfo{Attempt: 1, Method: request.Method, StatusCode: status, Error: err, Duration: time.Since(start)})
+	}
 	if err != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
 		release()
 		return nil, fmt.Errorf("netloom.SendStream: %w", err)
 	}
-	meta := &Response{RequestHeaders: request.Header.Clone(), StatusCode: response.StatusCode, Header: response.Header,
+	meta := &Response{RequestHeaders: safeRequestHeaders(request.Header), StatusCode: response.StatusCode, Header: response.Header,
 		ContentLength: response.ContentLength, ContentType: response.Header.Get("Content-Type"),
 		WebServer: response.Header.Get("Server"), Location: response.Header.Get("Location"),
 		CSP: response.Header.Get("Content-Security-Policy"), IP: observation.connectedIP(),
 		Scheme: request.URL.Scheme, HTTPVersion: response.Proto, ResponseTime: time.Since(start),
+	}
+	if capture != nil {
+		meta.UploadEvidence = capture.snapshot()
 	}
 	timing, actualTLS := observation.snapshot()
 	timing.QueueMS = milliseconds(start.Sub(queued))

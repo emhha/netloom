@@ -115,15 +115,45 @@ func BuildRequest(in RequestInput) (*netloom.Request, error) {
 	if !token(method) || len(method) > 32 || method == "CONNECT" {
 		return nil, errors.New("HTTP 方法无效或不支持 CONNECT")
 	}
-	body, err := requestBody(in, headers)
-	if err != nil {
-		return nil, err
+	var body []byte
+	var upload *netloom.Upload
+	nativeUpload := in.Upload != nil || in.StreamingMultipart != nil
+	if nativeUpload {
+		if in.Upload != nil && in.StreamingMultipart != nil || in.Body != "" || in.BodyEncoding != "" || in.Form != nil || in.Multipart != nil {
+			return nil, errors.New("Upload、StreamingMultipart、body、form 和 multipart 只能选择一种")
+		}
+		if len(headers.Values("Content-Length")) > 0 {
+			return nil, errors.New("native upload 的 Content-Length 由 Upload 声明长度管理，不能手动设置")
+		}
+		upload = in.Upload
+		if in.StreamingMultipart != nil {
+			if len(headers.Values("Content-Type")) > 0 {
+				return nil, errors.New("StreamingMultipart 会自动生成 Content-Type 和 boundary")
+			}
+			var contentType string
+			upload, contentType, err = netloom.NewMultipartUpload(in.StreamingMultipart)
+			if err != nil {
+				return nil, err
+			}
+			headers.Set("Content-Type", contentType)
+		}
+	} else {
+		body, err = requestBody(in, headers)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if in.CaptureRequestBody < 0 || in.CaptureRequestBody > 1<<20 {
+		return nil, errors.New("capture_request_body 必须介于 0 和 1048576 字节")
 	}
 	if values := headers.Values("Content-Length"); len(values) > 0 {
 		if len(values) != 1 || values[0] != strconv.Itoa(len(body)) {
 			return nil, errors.New("Content-Length 与实际请求体长度不一致")
 		}
 		headers.Del("Content-Length")
+	}
+	if in.BasicAuth != nil && in.Auth != nil {
+		return nil, errors.New("basic_auth 与 auth 不能同时设置")
 	}
 	if in.BasicAuth != nil {
 		if len(in.BasicAuth.Username)+len(in.BasicAuth.Password) > 8192 {
@@ -147,6 +177,30 @@ func BuildRequest(in RequestInput) (*netloom.Request, error) {
 	}
 	request := &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion, FreshConnection: in.FreshConnection,
 		VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}
+	request.Upload = upload
+	request.CaptureRequestBody = in.CaptureRequestBody
+	if in.Auth != nil {
+		auth := &netloom.AuthOptions{Scheme: in.Auth.Scheme, Username: in.Auth.Username, Password: in.Auth.Password, MaxChallenges: in.Auth.MaxChallenges}
+		if err := auth.Validate(); err != nil {
+			return nil, err
+		}
+		if len(headers.Values("Authorization")) > 0 || u.User != nil {
+			return nil, errors.New("auth 与 Authorization 或 URL 凭据冲突")
+		}
+		request.Auth = auth.Clone()
+	}
+	if in.Retry != nil {
+		for _, ms := range []int64{in.Retry.BaseDelayMS, in.Retry.MaxDelayMS} {
+			if ms < 0 || ms > (1<<63-1)/int64(time.Millisecond) {
+				return nil, errors.New("retry 延迟必须是非负且不溢出的毫秒数")
+			}
+		}
+		policy := &netloom.RetryPolicy{MaxRetries: in.Retry.MaxRetries, Methods: in.Retry.Methods, StatusCodes: in.Retry.StatusCodes, BaseDelay: time.Duration(in.Retry.BaseDelayMS) * time.Millisecond, MaxDelay: time.Duration(in.Retry.MaxDelayMS) * time.Millisecond, RespectRetryAfter: in.Retry.RespectRetryAfter}
+		if err := policy.Validate(); err != nil {
+			return nil, err
+		}
+		request.RetryPolicy = policy.Clone()
+	}
 	if in.TLS != nil {
 		tls := &netloom.TLSOptions{
 			MinVersion: in.TLS.MinVersion, MaxVersion: in.TLS.MaxVersion,

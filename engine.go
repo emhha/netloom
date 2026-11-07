@@ -51,10 +51,17 @@ func WithLogger(l *slog.Logger) EngineOption {
 // New builds an Engine from cfg and validates optional connection pool limits.
 func New(cfg Config, opts ...EngineOption) (*Engine, error) {
 	cfg = cfg.withDefaults()
+	cfg.RetryPolicy = cfg.RetryPolicy.Clone()
+	if err := cfg.RetryPolicy.Validate(); err != nil {
+		return nil, err
+	}
 	if err := cfg.PhaseTimeouts.validate(); err != nil {
 		return nil, err
 	}
-	tlsT := newTLSTransportWithJar(cfg.MaxBodySize, cfg.CookieJar)
+	tlsT := newTLSTransportWithJar(cfg.MaxBodySize, cfg.CookieJar && cfg.Session == nil)
+	if cfg.Session != nil {
+		tlsT.cookies = cfg.Session
+	}
 	if cfg.ConnectionPool != nil {
 		poolConfig := *cfg.ConnectionPool
 		pool, err := newClientPool(poolConfig)
@@ -171,11 +178,7 @@ func (e *Engine) Send(ctx context.Context, req *Request) (*Response, error) {
 		return nil, err
 	}
 	defer release()
-	cfg := e.cfg
-	if req.Method != "" && req.Method != "GET" && req.Method != "HEAD" && req.Method != "OPTIONS" {
-		cfg.Retries = 0
-	}
-	tmp := newScheduler(cfg, e.tlsT, e.rawT, e.logger)
+	tmp := newScheduler(e.cfg, e.tlsT, e.rawT, e.logger)
 	resp, err := tmp.sendWithRetry(ctx, req)
 	if err != nil {
 		return resp, fmt.Errorf("netloom.Engine.Send: %w", err)
