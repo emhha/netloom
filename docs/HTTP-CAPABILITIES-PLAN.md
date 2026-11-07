@@ -27,11 +27,14 @@
 - 自定义/显式指纹、信任根和 mTLS 在同一容量限制下一次性使用，避免不完整身份 key 导致连接串用。后续不可变 TLS/profile 身份与并发 multiplexing 仍待设计；Cookie 会话存储尚无独立容量上限。
 - 显式 HTTP/2 策略：`2` 偏好并允许降级，`2-only` 在同一 HTTPS 握手的 ALPN 成功后才发 HTTP 请求。严格模式暂不复用，仅支持直连及 HTTP CONNECT 代理；覆盖不可用、代理与取消。非严格模式保留其他代理 scheme，但其第三方握手实时取消限制尚未解除。
 
-后续阶段 2B（未实现）：
+已实现的阶段 2B：
 
-- 阶段超时和结构化阶段错误：连接、TLS、响应头、body idle 与总体预算；保留 errors.Is/As 因果链。当前仍是单次总超时与固定 TCP 拨号上限，不声称已经提供分阶段控制。
+- Config.PhaseTimeouts 与整组 Request 指针覆盖，提供连接（DNS/TCP/HTTP CONNECT）、TLS/HTTP 连接初始化、完整最终响应头、单次阻塞 Body.Read idle，以及跨重试和 Do 重定向的 Total；默认零值不加额外 timer，保留既有单次 Timeout。显式 Connect 可替代旧固定 TCP 后备上限。
+- 使用实际当前租约的 context/原始 socket 执行取消，不替换浏览器 TLS Profile，不增加探测握手；TLSHandshake 明确包括 H2 初始化，不伪称精确纯握手计时。阶段策略只支持直连/HTTP 代理；其他代理在启用非零预算时显式拒绝，保留零策略下既有行为。
+- PhaseError 标识 pool/connect/tls/request/response_header/body/total 并支持 errors.Is/As；保留部分响应、流式 Status 与自定义调用方取消 cause。Total 使用绝对 deadline 归属，避免 socket 期限先于 context timer 唤醒时被误标或重试。
+- nethttp 输入使用显式整数毫秒字段并拒绝负数/溢出。覆盖 H1/H2/严格 H2、真实过期连接重连、CONNECT/TLS/header/body stall、Raw、重试/跳转总预算和流式消费暂停；具体计时/排队边界见 [API 与配置](API.md)，实际执行见 [验证记录](VALIDATION.md)。
 
-验收：同配置连接复用与隔离配置不串用；池满等待/取消/Close 有界释放；H2 实际协议可验证。各阶段独立超时的验收留待 2B。
+验收：同配置连接复用与隔离配置不串用；池满等待/取消/Close 有界释放；H2 实际协议可验证；各阶段超时能终止实际 socket、保留错误原因/部分证据，并通过本地回归与 race。
 
 ## 阶段三：网络映射与 TLS 测试参数
 
@@ -45,7 +48,7 @@
 
 - reader 型上传及流式 multipart：长度、关闭、取消、重放与请求证据上限。
 - 可注入/清空的内存会话，保留按 host 隔离模式与有界生命周期。
-- 可选重试策略与逐次观察、退避和总预算；已交付流式正文后不透明重试。
+- 可选重试策略与逐次观察、退避；跨重试/重定向的 Total 已在阶段 2B 交付，方法幂等性、body replay 与 Retry-After 仍待此阶段完善。已交付流式正文后不透明重试。
 - 按实际需求增加 Digest 和认证扩展点；挑战轮数、body replay、origin 与敏感信息脱敏明确。
 - 完善普通请求规范化与 Raw 字节保真契约，不为 Raw 放宽常规安全适配。
 

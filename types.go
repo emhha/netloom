@@ -43,7 +43,10 @@ type Request struct {
 
 	Proxy   string
 	Timeout time.Duration
-	Meta    map[string]any
+	// PhaseTimeouts overrides the entire Engine phase policy; nil inherits it.
+	// A pointer to a zero policy disables configured phase/total timers.
+	PhaseTimeouts *PhaseTimeouts
+	Meta          map[string]any
 }
 
 // TLSInfo describes the peer certificate captured during the TLS handshake.

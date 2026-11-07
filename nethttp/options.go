@@ -147,6 +147,15 @@ func BuildRequest(in RequestInput) (*netloom.Request, error) {
 	}
 	request := &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion, FreshConnection: in.FreshConnection,
 		VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}
+	if in.PhaseTimeouts != nil {
+		p := in.PhaseTimeouts
+		for _, ms := range []int64{p.ConnectMS, p.TLSHandshakeMS, p.ResponseHeaderMS, p.BodyIdleMS, p.TotalMS} {
+			if ms < 0 || ms > (1<<63-1)/int64(time.Millisecond) {
+				return nil, errors.New("phase_timeouts 必须是非负且不溢出的毫秒数")
+			}
+		}
+		request.PhaseTimeouts = &netloom.PhaseTimeouts{Connect: time.Duration(p.ConnectMS) * time.Millisecond, TLSHandshake: time.Duration(p.TLSHandshakeMS) * time.Millisecond, ResponseHeader: time.Duration(p.ResponseHeaderMS) * time.Millisecond, BodyIdle: time.Duration(p.BodyIdleMS) * time.Millisecond, Total: time.Duration(p.TotalMS) * time.Millisecond}
+	}
 	if in.TLSProfile != "" {
 		request.Profile = netloom.ProfileByName(in.TLSProfile)
 	}

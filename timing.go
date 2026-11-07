@@ -98,11 +98,17 @@ func observe(ctx context.Context, start time.Time) (context.Context, *observatio
 			}
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
+			enterPhase(ctx, PhaseRequest)
 			recordConnectedIP(context.WithValue(ctx, observationKey{}, o), info.Conn)
 			if c, ok := info.Conn.(interface{ ConnectionState() tls.ConnectionState }); ok {
 				o.mu.Lock()
 				o.tls = buildTLSInfo(c.ConnectionState())
 				o.mu.Unlock()
+			}
+		},
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				enterPhase(ctx, PhaseResponseHeader)
 			}
 		},
 		GotFirstResponseByte: func() { o.mu.Lock(); defer o.mu.Unlock(); o.timings.FirstByteMS = measured(o.start) },

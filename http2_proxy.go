@@ -36,7 +36,7 @@ func dialHTTPProxy(ctx context.Context, proxyURL, network, target string) (net.C
 	if u.Port() == "" {
 		addr = net.JoinHostPort(u.Hostname(), "80")
 	}
-	raw, err := (&net.Dialer{Timeout: dialTimeout}).DialContext(ctx, network, addr)
+	raw, err := phaseDialer(ctx, &net.Dialer{Timeout: dialTimeout}).DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}

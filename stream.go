@@ -69,6 +69,13 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	// Resolve the same request > Engine > default timeout as buffered sends,
 	// without mutating the caller's request. The context covers body reads.
 	requestCopy := *req
+	if requestCopy.PhaseTimeouts == nil {
+		policy := e.cfg.PhaseTimeouts
+		requestCopy.PhaseTimeouts = &policy
+	}
+	if err := requestCopy.PhaseTimeouts.validate(); err != nil {
+		return nil, err
+	}
 	if requestCopy.Timeout <= 0 {
 		requestCopy.Timeout = e.cfg.Timeout
 	}
@@ -82,9 +89,21 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 		return nil, err
 	}
 	start := time.Now()
-	ctx, cancelTimeout := context.WithTimeout(ctx, req.Timeout)
+	stopTotal := func() {}
+	if total := req.PhaseTimeouts.Total; total > 0 {
+		ctx, stopTotal = withTotalBudget(ctx, total)
+	}
+	ctx, cancelAttempt := context.WithTimeout(ctx, req.Timeout)
+	cancelTimeout := func() { cancelAttempt(); stopTotal() }
+	ctx, clock, err := newPhaseClock(ctx, req)
+	if err != nil {
+		cancelTimeout()
+		release()
+		return nil, err
+	}
 	defer func() {
 		if !owned {
+			clock.finish()
 			cancelTimeout()
 		}
 	}()
@@ -93,11 +112,12 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	lease, err := transport.acquireClient(ctx, req)
 	if err != nil {
 		release()
-		return nil, err
+		return nil, clock.failure(ctx, err)
 	}
 	client := lease.client
 	defer func() {
 		if !owned {
+			clock.stop()
 			lease.release(false)
 		}
 	}()
@@ -134,12 +154,15 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	if response.TLS != nil {
 		meta.TLS = buildTLSInfo(*response.TLS)
 	}
+	response.Body = wrapPhaseBody(ctx, response.Body)
 	var body *streamBody
 	body = &streamBody{ReadCloser: response.Body, ctx: ctx,
 		start: start, headersAt: time.Now(), status: StreamStatus{Timings: cloneTimings(timing)},
 		cleanup: func() {
 			status := body.snapshot()
+			clock.stop()
 			lease.release(status.Complete && status.Error == nil && body.err == nil)
+			clock.finish()
 			cancelTimeout()
 			release()
 			finish()
@@ -165,7 +188,9 @@ type streamBody struct {
 func (b *streamBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
 	if err != nil && err != io.EOF {
-		if cause := requestContextError(b.ctx); cause != nil {
+		if clock := phaseClockFrom(b.ctx); clock != nil {
+			err = clock.failure(b.ctx, err)
+		} else if cause := requestContextError(b.ctx); cause != nil {
 			err = cause
 		}
 	}
@@ -186,7 +211,9 @@ func (b *streamBody) finishLocked(err error) {
 	b.status.Finished = true
 	b.status.Complete = err == io.EOF
 	if err != io.EOF {
-		if cause := requestContextError(b.ctx); cause != nil {
+		if clock := phaseClockFrom(b.ctx); clock != nil {
+			err = clock.failure(b.ctx, err)
+		} else if cause := requestContextError(b.ctx); cause != nil {
 			err = cause
 		}
 		b.status.Error = err

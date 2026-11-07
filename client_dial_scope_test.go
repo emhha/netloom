@@ -123,7 +123,7 @@ func (c *stalledTLSConn) Read([]byte) (int, error) {
 
 func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 	for _, stream := range []bool{false, true} {
-		for _, mode := range []string{"request-timeout", "caller-cancel", "engine-close"} {
+		for _, mode := range []string{"request-timeout", "tls-phase", "caller-cancel", "engine-close"} {
 			name := mode
 			if stream {
 				name += "/stream"
@@ -147,6 +147,9 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				req := &Request{URL: server.URL, HTTPVersion: "2", Timeout: 3 * time.Second}
+				if mode == "tls-phase" {
+					req.PhaseTimeouts = &PhaseTimeouts{TLSHandshake: 80 * time.Millisecond}
+				}
 				if mode == "request-timeout" {
 					req.Timeout = 80 * time.Millisecond
 				}
@@ -190,6 +193,9 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				}
 				select {
 				case err := <-done:
+					if mode == "tls-phase" {
+						assertPhaseDeadline(t, err, PhaseTLS)
+					}
 					if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrEngineClosed) {
 						t.Fatalf("reconnect cancellation cause: %v", err)
 					}

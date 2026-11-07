@@ -95,3 +95,25 @@ go test -race . -run '^Test(ClientDialScope|ConnectionPoolStaleHTTP2)' -count=10
 中间失败/审查问题均修复后重跑：HTTP 代理接线曾同时设置两个不兼容的第三方选项，配置校验失败；CONNECT 取消有时被暴露为 socket 错误而非 context 因果链；底层 H2 过期连接重拨使用 background context，可能在 TLS 初始化时无限等待。最终 HTTP CONNECT 采用自有 context-aware 交换，拨号/握手错误按有效 context 归因，原始连接按当前独占租约绑定取消，并在成功归还前等待旧取消回调结束。重连回归先完成真实 H2 请求、关闭旧连接，再让新连接停在 TLS 握手，缓冲/流式的请求期限、取消与 Engine.Close 均在 race 下连续 10 次通过，且观察到 stalled socket 关闭；不是只验证外层调用提早返回。
 
 范围限制：默认不启用池；MaxClients 约束客户端条目/租约而不是所有 TCP socket 的精确总数。首版不提供同客户端 H2 并发 multiplexing，不缓存显式 Profile、TLSOptions、严格 H2 或非 HTTP 代理 scheme，Cookie 会话内存未设独立上限。严格 H2 仅直连及 HTTP CONNECT；非严格模式保留其他代理 scheme，但其第三方拨号器仍有实时取消限制。未验证外部网络、外部 Cookie 服务、HTTP/3、阶段超时/结构化阶段错误或性能收益；阶段 2B 及后续能力仍是计划。
+
+## 2026-11-07：阶段 2B 阶段超时与错误归因
+
+工具链：Go 1.26.3 linux/amd64、Python 3.14.8。最终代码执行以下完整命令，均退出码 0：
+
+```sh
+go test -race . ./nethttp -run 'Test(Phase|BuildRequestPhase|ConnectionPoolStaleHTTP2|HTTPProxyCONNECT)' -count=5 -timeout=90s
+make check && make race && make integration-compile && make integration-local && git diff --check
+```
+
+- 定向 race 回归连续 5 次通过（根包 25.934s，nethttp 1.019s）。
+- `make check`：格式、维护文档/仓库边界、17 个 Python 离线测试、50 个固定字典文件校验、全包测试、vet、build 通过。
+- `make race`：全包通过，无已报告数据竞争。
+- `make integration-compile`：所有集成测试编译通过，不能据此声称执行了外部服务。
+- `make integration-local`：本地集成通过；明确排除外部 Python Cookie 服务。
+- `git diff --check`：通过。
+
+H1/H2/严格 H2 覆盖实际 POST 写完后无响应、103 和不完整最终响应头、TLS stall 与真实过期 H2 后台重握手、HTTP CONNECT stall，以及正文部分字节之后阻塞。观察到 stalled socket 被关闭、容量可回收；复用连接不会错误启动新的 TLS timer。BodyIdle 逐次阻塞读取计时，持续小块进展可跨越单次 idle 时长，流式调用方暂停消费不误超时。池满等待受单次 Timeout/Total 控制，不提前启动 Connect/TLS/header timer，取消等待不窃取原租约。测试同时覆盖配置继承/请求整组零覆盖、负值/毫秒溢出、更早的 caller deadline、取消 cause 保留、stream Status 与 Engine.Close、Raw 部分响应/100/103 最终头，以及跨重试/Do 多跳/跳转校验的 Total。
+
+中间验证发现问题后修复重跑：POST stall 测试服务必须先读完请求体，才能可靠通过服务端 context 观察断连，避免测试 cleanup 停滞；socket deadline 可能先于 context timer 发布 cause，此时记录有效 Total deadline 归属并停止继续重试，避免总预算被误归为 connect/body。该 Total 回归另以 `go test -race . -run '^TestPhase(RawTotal|TimeoutTotal)' -count=15 -timeout=45s` 连续 15 次通过。独立复核还发现 Do 归一化丢失 Canceled 身份、流式旧归一化剥掉阶段包装；最终用例分别验证 errors.Is(Canceled/Deadline/自定义 cause)、errors.As(PhaseError)、部分 Response.Error 和 StreamStatus.Error。
+
+范围限制：本阶段不证明精确纯 TLS 握手测量、HTTP/3、外部网络/代理兼容性、上传 replay、按方法安全重试或性能收益。TLSHandshake 实际覆盖 TLS 至 HTTP-ready/H2 初始化；非零策略只支持直连和 HTTP 代理。Send/Run/Stream 的 Total 不包含初始准入排队；Do 外层预算包含其内部 Send 排队。未运行外部 Cookie 服务、真实付费 API 或远端目标。前面的阶段记录保留历史边界，当前已实现能力以本节及 [API](API.md) 为准。

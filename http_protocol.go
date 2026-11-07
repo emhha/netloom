@@ -57,6 +57,7 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 	}
 	var rawConn net.Conn
 	var err error
+	enterPhase(ctx, PhaseConnect)
 	if req.Proxy == "" {
 		rawConn, err = client.GetDialer().DialContext(ctx, "tcp", addr)
 	} else {
@@ -65,6 +66,7 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 	if err != nil {
 		return nil, err
 	}
+	enterPhase(ctx, PhaseTLS)
 	// NewClientConn below writes its preface synchronously, before RoundTrip's
 	// request-context handling exists. Closing the raw connection on cancellation
 	// therefore covers initialization as well as the handshake and body reads.
@@ -99,10 +101,6 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 	if state.NegotiatedProtocol != http2.NextProtoTLS {
 		return nil, fmt.Errorf("%w: negotiated ALPN %q", ErrHTTP2Unavailable, state.NegotiatedProtocol)
 	}
-	if trace != nil && trace.GotConn != nil {
-		trace.GotConn(httptrace.GotConnInfo{Conn: conn})
-	}
-
 	transport := &http2.Transport{
 		DisableCompression: true,
 		Settings:           profile.GetSettings(), SettingsOrder: profile.GetSettingsOrder(),
@@ -124,6 +122,9 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 	cc, err := transport.NewClientConn(conn)
 	if err != nil {
 		return nil, err
+	}
+	if trace != nil && trace.GotConn != nil {
+		trace.GotConn(httptrace.GotConnInfo{Conn: conn})
 	}
 	// Keep the normal client's cookie-jar and URL-userinfo handling without
 	// invoking its transport (which could silently negotiate HTTP/1.1).

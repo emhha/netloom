@@ -12,7 +12,7 @@ import (
 func TestHTTPProxyCONNECTCancellationClosesSocket(t *testing.T) {
 	for _, pooled := range []bool{false, true} {
 		for _, stream := range []bool{false, true} {
-			for _, mode := range []string{"cancel", "deadline", "engine-close"} {
+			for _, mode := range []string{"cancel", "deadline", "connect-phase", "engine-close"} {
 				name := mode
 				if pooled {
 					name += "/pooled"
@@ -31,6 +31,9 @@ func TestHTTPProxyCONNECTCancellationClosesSocket(t *testing.T) {
 					}))
 					defer proxy.Close()
 					cfg := Config{Retries: -1, Timeout: 10 * time.Second}
+					if mode == "connect-phase" {
+						cfg.PhaseTimeouts.Connect = 80 * time.Millisecond
+					}
 					if pooled {
 						cfg.ConnectionPool = &ConnectionPoolConfig{MaxClients: 1}
 					}
@@ -79,6 +82,9 @@ func TestHTTPProxyCONNECTCancellationClosesSocket(t *testing.T) {
 					}
 					select {
 					case err := <-done:
+						if mode == "connect-phase" {
+							assertPhaseDeadline(t, err, PhaseConnect)
+						}
 						if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 							t.Fatalf("CONNECT cancellation cause: %v", err)
 						}

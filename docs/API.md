@@ -30,15 +30,51 @@ RequestInput 的 FollowRedirects/MaxRedirects、Stream、MaxResponseBytes 是调
 | Delay | 0；请求开始前额外延迟 |
 | Retries | 0 补 2，负数禁用；网络错误可重试，HTTP 错误状态不重试 |
 | MaxHostErrors | 30，Run 的主机错误阈值 |
-| Timeout | 10 秒 |
+| Timeout | 10 秒，单次尝试（保留既有优先级） |
+| PhaseTimeouts | 零值关闭额外阶段/跨尝试预算；负值令 New 报错，见下文 |
 | MaxBodySize | 2 MiB，缓冲响应上限 |
 | CookieJar | false；开启后按主机隔离并共享 |
 | ConnectionPool | nil；保留每次尝试新建客户端。非 nil 显式启用有界复用，见下文 |
 
 根包 Request.VerifyTLS 默认 false；调用方应显式选择。自定义根和客户端证书不改变该开关。
 Send 对非 GET/HEAD/OPTIONS 方法禁用重试；Run 使用任务调度器的重试策略，调用方应对具有副作用的任务设置 Retries=-1。
-Send、Run、SendStream 的有效总超时均为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间；调用方需要包括排队、重试及重定向的总预算时应设置 context deadline。TCP 拨号超时仍固定 10 秒，不等于总超时上限。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒。不修改调用方 Request。
+Send、Run、SendStream 的单次尝试总超时仍为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间。TCP 拨号缺省保留 10 秒后备上限；显式正值 PhaseTimeouts.Connect 由该次连接阶段预算接管，不再被固定 10 秒截断。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒；直接调用不创建跨尝试 Total 预算，应由调用方提供 context deadline。不修改调用方 Request；调用期间及未关闭的流存续期间，请求、Profile/TLS 对象应保持不可变。
 SendStream 不重试且不截断正文；有效总超时也覆盖返回响应头之后的正文读取。
+
+### 阶段超时与总体预算
+
+`Config.PhaseTimeouts PhaseTimeouts` 是 Engine 缺省策略；`Request.PhaseTimeouts *PhaseTimeouts` 为整组覆盖：nil 继承 Engine，非 nil 零值关闭整组额外预算，不按字段合并。各字段是 Go `time.Duration`，零值不启动相应计时器，负值报错；既有单次 Timeout 与调用方更早 deadline 不被延长。阶段策略在实际当前租约上生效，不把不同阶段期限固化进可复用客户端。
+
+| 字段 | 实际计时边界 |
+| --- | --- |
+| Connect | 本次拨号开始至 DNS、TCP 及 HTTP 代理 CONNECT 完成；复用已有连接不重复消耗 |
+| TLSHandshake | TCP/CONNECT 完成至 HTTP 连接就绪，包含实际 uTLS 握手以及 H2 preface/初始化；不是精确的纯 TLS 握手时长 |
+| ResponseHeader | 成功写完请求后，至完整最终响应头返回；收到首字节、103 等中间头或部分最终头不会结束预算 |
+| BodyIdle | 每一次阻塞 Body.Read 的预算；新一次读取重新计时，流式调用方处理数据/暂停消费时不计时；不是全正文时长或字节限速 |
+| Total | Send/Run 在并发槽、限流/Delay 排队完成后开始，横跨所有尝试及其正文；SendStream 同样在准入后开始且覆盖流式读取 |
+
+客户端池租约等待包含在单次 Timeout/Total 中，尚未建连时不计算 Connect/TLS/Header；请求写入阶段由单次 Timeout/Total/context 约束，没有独立上传超时字段。阶段 timer 结束会取消实际当前 socket，不在后台留下假超时握手；BodyIdle 失败保留已收到的 headers/部分正文，流式状态在 `Status().Error` 可见。流仍必须 Close。
+
+`Do` 对整个重定向链只启动一次 Total（包括每跳内部重试）。其预算在 Do 校验入参后、首跳前开始，因此包含 Do 内部的 Send 排队和跳转校验等待。显式请求策略优先；nil 时仅当 sender 是直接 `*Engine` 才能读取该 Engine 缺省策略，包装器/任意 Sender 必须显式传入请求策略或 context deadline。自定义 Sender 必须遵守 context 才能被中断。需要包含 Send/Run 最初排队时间的严格端到端预算仍应使用调用方 context deadline。
+
+阶段预算当前只支持直连及 `http://` 代理；包含 Total 在内的任意非零策略用于其他代理 scheme 会显式报错，避免声称已经解决第三方代理拨号器的实时取消限制。整组零值时保留原先非严格路径的其他代理行为。Raw 同样支持阶段预算并保留原始 HTTP 字节、部分响应和既有 best-effort 解析，但不应用自动跳转；直接 RoundTrip 不启动 Total。
+
+网络/正文失败可用 `errors.As(err, &phaseError)` 取得 `*PhaseError`。`Phase` 为 `pool`、`connect`、`tls`、`request`、`response_header`、`body` 或 `total`，标识观察到失败的操作，不推断未观测的根因。阶段/Total 期限满足 `errors.Is(err, context.DeadlineExceeded)` 和 `net.Error.Timeout()`；调用方取消仍满足 `errors.Is(err, context.Canceled)`，in-flight 的自定义取消 cause 也保留。底层地址阻止、TLS 验证等错误继续可用 errors.Is/As 判断；参数/排队错误不承诺一定有 PhaseError。错误包装不附加 URL 或凭据，但不对底层错误文本做脱敏；不得直接将含秘密的错误持久化或展示。
+
+例如，在保留既有单次 Timeout 的同时为多次尝试提供预算：
+
+```go
+engine, err := netloom.New(netloom.Config{
+    Timeout: 10 * time.Second,
+    PhaseTimeouts: netloom.PhaseTimeouts{
+        Connect: 2 * time.Second, TLSHandshake: 3 * time.Second,
+        ResponseHeader: 4 * time.Second, BodyIdle: 2 * time.Second,
+        Total: 15 * time.Second,
+    },
+})
+```
+
+`nethttp.RequestInput.PhaseTimeouts` 是可选 `*PhaseTimeoutsInput`，JSON 字段为 `phase_timeouts`，内部整数毫秒字段为 `connect_ms`、`tls_handshake_ms`、`response_header_ms`、`body_idle_ms`、`total_ms`。省略/null 继承，`{}` 关闭整组；负数和转换为 Duration 时溢出均报错。此输入适配不等价于支持对应 curl CLI 选项。
 
 ### HTTP 协议策略
 

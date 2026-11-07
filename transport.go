@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -96,7 +97,9 @@ func newTLSTransportWithJar(maxBody int, cookieEnabled bool) *tlsTransport {
 func (t *tlsTransport) guardDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
 	base := &net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}
 	if t.noGuard {
-		return base.DialContext
+		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return phaseDialer(ctx, base).DialContext(ctx, network, addr)
+		}
 	}
 	return guardedDialContext(base, t.resolver)
 }
@@ -191,7 +194,9 @@ func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_cl
 // doRequest pins the Engine's default profile snapshot for strict H2 too.
 func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hreq *http.Request) (_ *http.Response, returnErr error) {
 	defer func() {
-		if returnErr != nil {
+		if clock := phaseClockFrom(hreq.Context()); clock != nil {
+			returnErr = clock.failure(hreq.Context(), returnErr)
+		} else if returnErr != nil {
 			if cause := requestContextError(hreq.Context()); cause != nil {
 				returnErr = cause
 			}
@@ -205,7 +210,11 @@ func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hre
 		}
 		req = &requestCopy
 	}
-	return doHTTPRequest(client, req, hreq)
+	response, err := doHTTPRequest(client, req, hreq)
+	if err == nil && response != nil {
+		enterPhase(hreq.Context(), PhaseBody)
+	}
+	return response, err
 }
 
 func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, error) {
@@ -216,14 +225,19 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	start := time.Now()
+	ctx, clock, err := newPhaseClock(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer clock.finish()
 	ctx, observation := observe(ctx, start)
 	observation.proxy = req.Proxy != ""
 	lease, err := t.acquireClient(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, clock.failure(ctx, err)
 	}
 	reusable := false
-	defer func() { lease.release(reusable) }()
+	defer func() { clock.stop(); lease.release(reusable) }()
 	client := lease.client
 
 	method := req.Method
@@ -248,6 +262,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	if err != nil {
 		return nil, fmt.Errorf("netloom.tlsTransport: %w", err)
 	}
+	hresp.Body = wrapPhaseBody(ctx, hresp.Body)
 	defer func() { _ = hresp.Body.Close() }()
 
 	resp := &Response{
@@ -279,9 +294,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 		resp.TLS = buildTLSInfo(*hresp.TLS)
 	}
 	if err != nil {
-		if cause := requestContextError(ctx); cause != nil {
-			err = cause
-		}
+		err = clock.failure(ctx, err)
 		resp.Error = err
 		return resp, fmt.Errorf("netloom: read response body: %w", err)
 	}
@@ -357,7 +370,7 @@ func newRawTransport(maxBody int) *rawTransport {
 	return &rawTransport{maxBody: maxBody, resolver: net.DefaultResolver}
 }
 
-func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, error) {
+func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response, returnErr error) {
 	if req.Proxy != "" {
 		return nil, fmt.Errorf("netloom.rawTransport: proxy is unsupported for raw requests")
 	}
@@ -387,14 +400,29 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	}
 	addr := net.JoinHostPort(host, port)
 
+	ctx, clock, err := newPhaseClock(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer clock.finish()
+	defer func() { returnErr = clock.failure(ctx, returnErr) }()
+	scope := &clientDialScope{}
+	scope.begin(ctx)
+	// Stop phase timers before detaching cancellation; finish only after all
+	// raw sockets (including ones still in TLS setup) have been cleaned up.
+	defer func() { clock.stop(); scope.end(false) }()
+
 	base := &net.Dialer{Timeout: dialTimeout}
 	var guard func(ctx context.Context, network, addr string) (net.Conn, error)
 	if t.noGuard {
-		guard = base.DialContext
+		guard = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return phaseDialer(ctx, base).DialContext(ctx, network, addr)
+		}
 	} else {
 		guard = guardedDialContext(base, t.resolver)
 	}
 
+	guard = scope.wrapDial(guard)
 	var conn net.Conn
 	var tlsInfo *TLSInfo
 
@@ -450,12 +478,11 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	if err := conn.SetDeadline(deadline); err != nil {
 		return nil, err
 	}
-	stop := context.AfterFunc(ctx, func() { conn.Close() })
-	defer stop()
-
+	enterPhase(ctx, PhaseRequest)
 	if _, err := conn.Write(req.Raw); err != nil {
 		return nil, fmt.Errorf("netloom.rawTransport: write: %w", err)
 	}
+	enterPhase(ctx, PhaseResponseHeader)
 
 	br := bufio.NewReader(io.LimitReader(conn, int64(t.maxBody)+8192))
 	resp := &Response{
@@ -466,7 +493,13 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	}
 
 	// Best-effort parse: malformed responses still yield raw bytes in Body.
-	if hresp, perr := http.ReadResponse(br, nil); perr == nil {
+	hresp, perr := http.ReadResponse(br, nil)
+	for perr == nil && hresp.StatusCode >= 100 && hresp.StatusCode < 200 && hresp.StatusCode != 101 {
+		_ = hresp.Body.Close()
+		hresp, perr = http.ReadResponse(br, nil)
+	}
+	if perr == nil {
+		enterPhase(ctx, PhaseBody)
 		resp.StatusCode = hresp.StatusCode
 		resp.Header = hresp.Header
 		resp.HTTPVersion = hresp.Proto
@@ -474,13 +507,23 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 		resp.WebServer = hresp.Header.Get("Server")
 		resp.ContentType = hresp.Header.Get("Content-Type")
 		resp.Location = hresp.Header.Get("Location")
+		hresp.Body = wrapPhaseBody(ctx, hresp.Body)
 		resp.Body, resp.BodyTruncated, err = readCappedResult(hresp.Body, t.maxBody)
 		_ = hresp.Body.Close()
 	} else {
+		// Malformed protocol bytes remain best-effort evidence, but a failed
+		// header read must not turn cancellation or a timeout into success.
 		resp.Body, resp.BodyTruncated, err = readCappedResult(br, t.maxBody)
+		var timeoutErr net.Error
+		if cause := requestContextError(ctx); cause != nil {
+			err = cause
+		} else if errors.Is(perr, context.Canceled) || errors.Is(perr, context.DeadlineExceeded) || errors.As(perr, &timeoutErr) && timeoutErr.Timeout() {
+			err = perr
+		}
 	}
 	resp.ResponseTime = time.Since(start)
 	if err != nil {
+		err = clock.failure(ctx, err)
 		resp.Error = err
 		return resp, fmt.Errorf("netloom: read raw response: %w", err)
 	}
@@ -514,9 +557,18 @@ func applyHeaderOrder(hreq *http.Request, order []string) {
 // It is only used to classify an existing read/close failure, not successful IO.
 func requestContextError(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
+		var phaseErr *PhaseError
+		if cause := context.Cause(ctx); errors.As(cause, &phaseErr) {
+			return cause
+		} else if cause != nil && cause != err {
+			return errors.Join(err, cause)
+		}
 		return err
 	}
 	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		if total, ok := ctx.Value(totalBudgetKey{}).(time.Time); ok && total.Equal(deadline) {
+			return &PhaseError{Phase: PhaseTotal, Err: context.DeadlineExceeded}
+		}
 		return context.DeadlineExceeded
 	}
 	return nil

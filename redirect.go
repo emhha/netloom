@@ -50,6 +50,27 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 		policy.MaxHops = 10
 	}
 	current := cloneRequest(request)
+	// Only a direct Engine exposes config defaults here; wrappers/custom
+	// senders can always opt in through the request policy instead.
+	var phases PhaseTimeouts
+	if current.PhaseTimeouts != nil {
+		phases = *current.PhaseTimeouts
+	} else if engine, ok := sender.(*Engine); ok {
+		phases = engine.cfg.PhaseTimeouts
+	}
+	if err := phases.validate(); err != nil {
+		return nil, err
+	}
+	if _, err := HTTPURL(current.URL); err != nil {
+		return nil, err
+	}
+	if phases.Total > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = withTotalBudget(ctx, phases.Total)
+		defer cancel()
+	}
+	// Per-hop Send budgets may shorten this context, never extend the single
+	// outer Total budget covering the entire redirect chain.
 	if current.Method == "" {
 		current.Method = "GET"
 	}
@@ -63,16 +84,22 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 		}
 	}()
 	for {
-		if err := ctx.Err(); err != nil {
-			return exchange, err
+		if cause := requestContextError(ctx); cause != nil {
+			return exchange, cause
 		}
 		if _, err := HTTPURL(current.URL); err != nil {
 			return exchange, err
 		}
 		if policy.ValidateURL != nil {
 			if err := policy.ValidateURL(ctx, current.URL); err != nil {
+				if cause := requestContextError(ctx); cause != nil {
+					return exchange, cause
+				}
 				return exchange, err
 			}
+		}
+		if cause := requestContextError(ctx); cause != nil {
+			return exchange, cause
 		}
 		response, err := sender.Send(ctx, current)
 		// Keep the last captured response when a later hop fails before headers.
@@ -80,6 +107,14 @@ func Do(ctx context.Context, sender Sender, request *Request, policy RedirectPol
 			exchange.Request, exchange.Response = current, response
 		}
 		if err != nil {
+			if cause := requestContextError(ctx); cause != nil {
+				var timed, failed *PhaseError
+				if !errors.As(cause, &timed) && errors.As(err, &failed) {
+					err = &PhaseError{Phase: failed.Phase, Err: cause}
+				} else {
+					err = cause
+				}
+			}
 			return exchange, err
 		}
 		if response == nil {

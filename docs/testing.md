@@ -28,6 +28,14 @@ go test -race . ./nethttp -run 'Test(ConnectionPool|ClientDialScope|HTTP|BuildRe
 
 本地服务覆盖 H1/H2 缓冲与流式顺序复用、实际 IP/证书/缺失阶段 timings、默认不复用与按次 FreshConnection、origin/验证开关/代理超时隔离、自定义 Profile/信任根一次性使用、客户端容量/空闲 LRU/TTL、等待取消、EOF 租约所有权、失败释放、Cookie 会话与客户端驱逐的独立生命周期，以及 Engine.Close 实际关闭空闲 socket。严格 H2 用例检查 ALPN 失败前无 HTTP/1 请求，含明文/无 ALPN/H1-only 目标、自定义信任/mTLS 和代理/取消；HTTP CONNECT 用例验证早期限/显式取消/Engine.Close 后 socket 关闭、认证不泄漏、响应头上限及预读字节保留。过期 H2 重连用例先完成真实 H2 请求、断开旧连接，再阻塞新 TLS 握手，检查缓冲/流式的超时、取消和 Close 不因依赖的后台 context 而卡住。ClientDialScope 另测旧 lease 取消不误关空闲连接及过时 dial 不可归入新 lease。这些不是外部网络或性能验收。
 
+## 阶段超时与结构化错误回归
+
+```sh
+go test -race . ./nethttp -run 'Test(Phase|BuildRequestPhase|ConnectionPoolStaleHTTP2|HTTPProxyCONNECT)' -count=5
+```
+
+本地 H1/H2/严格 H2 覆盖 POST 后完整响应头超时、103/不完整最终响应头、部分正文 idle 失败与流式 Status、调用方暂停消费不误计 idle、持续进展的正文不被固定 body 时长截断、TLS stall（含大写 HTTPS scheme）、真实过期 H2 重新握手、CONNECT 阻塞后的 socket 关闭与池容量释放。另测连接复用不重新计算 TLS 预算、晚到 WroteRequest 不复活已结束的 header timer、整组策略继承/显式零覆盖、负值和毫秒换算溢出、调用方提前 deadline/取消 cause、Raw TLS/header/body/部分响应，以及 Total 跨重试和 Do 多跳不重置。Connect 的模拟拨号用例检查依赖 Background context 被当前 lease ctx 替换；真实 socket 取消由 TLS/CONNECT 用例检查，不依赖不可控外网黑洞地址。这不是精确 TLS 握手时长、外部代理、浏览器等价性或性能验收。
+
 ## 并发检查
 
 ```sh

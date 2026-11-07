@@ -213,6 +213,18 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 
 func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response, error) {
 	request := *req
+	if request.PhaseTimeouts == nil {
+		policy := s.cfg.PhaseTimeouts
+		request.PhaseTimeouts = &policy
+	}
+	if err := request.PhaseTimeouts.validate(); err != nil {
+		return nil, err
+	}
+	if total := request.PhaseTimeouts.Total; total > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = withTotalBudget(ctx, total)
+		defer cancel()
+	}
 	if request.Timeout <= 0 {
 		request.Timeout = s.cfg.Timeout
 		if request.Timeout <= 0 {
@@ -249,8 +261,15 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 			return lastResponse, err
 		}
 		lastErr = err
-		if ctx.Err() != nil {
-			return lastResponse, ctx.Err()
+		if cause := requestContextError(ctx); cause != nil {
+			var phaseErr *PhaseError
+			if errors.As(cause, &phaseErr) && phaseErr.Phase == PhaseTotal {
+				return lastResponse, cause
+			}
+			if errors.Is(err, ctx.Err()) || errors.Is(err, context.Cause(ctx)) {
+				return lastResponse, err
+			}
+			return lastResponse, cause
 		}
 	}
 	return lastResponse, lastErr

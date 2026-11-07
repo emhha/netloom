@@ -85,9 +85,17 @@ func (s *clientDialScope) wrapDial(base func(context.Context, string, string) (n
 		if ctx == nil {
 			return nil, context.Canceled
 		}
+		enterPhase(ctx, PhaseConnect)
 		conn, err := base(ctx, network, addr)
 		if err != nil {
 			return nil, err
+		}
+		if clock := phaseClockFrom(ctx); clock != nil {
+			if clock.secure {
+				clock.enter(PhaseTLS)
+			} else {
+				clock.enter(PhaseRequest)
+			}
 		}
 		tracked := &scopedConn{Conn: conn, scope: s}
 		s.mu.Lock()

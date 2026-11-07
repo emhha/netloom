@@ -47,6 +47,8 @@ func main() {
 
 HTTP/HTTPS 请求可用 `HTTPVersion: "2"` 表示偏好 H2、允许 H1 降级，或用 `"2-only"` 要求在同一 TLS 连接确认 ALPN=h2 后才发送 HTTP。连接复用默认关闭；设置 `Config.ConnectionPool` 显式启用有界、按 origin 隔离的客户端租约，`Request.FreshConnection` 可按次绕过缓存。首版采用独占租约与顺序复用，并非同客户端 H2 并发 multiplexing；严格模式代理范围和缓存身份限制见 [API 与配置](docs/API.md)。
 
+可通过 `Config.PhaseTimeouts` 配置连接（含 DNS/HTTP CONNECT）、TLS/连接初始化、完整响应头、阻塞正文读取 idle 和跨重试/重定向总体预算；`Request.PhaseTimeouts` 可逐次覆盖。网络失败可用 `errors.As` 取得 `*PhaseError`，并继续用 `errors.Is` 判断取消/期限。默认不启用额外阶段计时器，不改变浏览器 Profile；TLS setup、排队与代理限制见 [API 与配置](docs/API.md)。
+
 ## 能力与包
 
 | 层次 | 包 | 用途 |

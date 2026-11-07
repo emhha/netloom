@@ -22,8 +22,9 @@ type Config struct {
 	MaxHostErrors int // consecutive per-host error cap (default 30); host skipped after
 
 	// Timeout / body limits.
-	Timeout     time.Duration // per-request timeout (default 10s)
-	MaxBodySize int           // max body bytes read (default 2MB); excess discarded
+	Timeout       time.Duration // per-request timeout (default 10s)
+	PhaseTimeouts PhaseTimeouts // optional HTTP phase and cross-attempt budgets
+	MaxBodySize   int           // max body bytes read (default 2MB); excess discarded
 
 	// CookieJar enables per-host session cookies. Each unique host gets its own
 	// jar shared across requests, so Set-Cookie is honoured for redirects,

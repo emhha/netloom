@@ -51,6 +51,9 @@ func WithLogger(l *slog.Logger) EngineOption {
 // New builds an Engine from cfg and validates optional connection pool limits.
 func New(cfg Config, opts ...EngineOption) (*Engine, error) {
 	cfg = cfg.withDefaults()
+	if err := cfg.PhaseTimeouts.validate(); err != nil {
+		return nil, err
+	}
 	tlsT := newTLSTransportWithJar(cfg.MaxBodySize, cfg.CookieJar)
 	if cfg.ConnectionPool != nil {
 		poolConfig := *cfg.ConnectionPool
