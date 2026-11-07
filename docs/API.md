@@ -33,11 +33,47 @@ RequestInput 的 FollowRedirects/MaxRedirects、Stream、MaxResponseBytes 是调
 | Timeout | 10 秒 |
 | MaxBodySize | 2 MiB，缓冲响应上限 |
 | CookieJar | false；开启后按主机隔离并共享 |
+| ConnectionPool | nil；保留每次尝试新建客户端。非 nil 显式启用有界复用，见下文 |
 
 根包 Request.VerifyTLS 默认 false；调用方应显式选择。自定义根和客户端证书不改变该开关。
 Send 对非 GET/HEAD/OPTIONS 方法禁用重试；Run 使用任务调度器的重试策略，调用方应对具有副作用的任务设置 Retries=-1。
 Send、Run、SendStream 的有效总超时均为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间；调用方需要包括排队、重试及重定向的总预算时应设置 context deadline。TCP 拨号超时仍固定 10 秒，不等于总超时上限。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒。不修改调用方 Request。
 SendStream 不重试且不截断正文；有效总超时也覆盖返回响应头之后的正文读取。
+
+### HTTP 协议策略
+
+`Request.HTTPVersion`（以及 `nethttp.RequestInput.HTTPVersion`）支持：
+
+| 值 | 行为 |
+| --- | --- |
+| 空或 `auto` | 保留浏览器 Profile 的 HTTPS ALPN 协商，可使用 H2，允许 HTTP/1.1；关闭 HTTP/3 |
+| `1.1` | 强制 HTTP/1.1 |
+| `2` | 偏好 H2、允许 HTTP/1.1 降级；与 `auto` 一样保留 Profile 的 ALPN，不强行改写不支持 H2 的自定义 Profile |
+| `2-only` | 仅 HTTPS；必须在同一实际连接的 TLS 握手中协商 `h2`，否则在发送 HTTP 请求之前失败；不支持明文 h2c |
+
+严格模式不先发送 HTTP/1.1 请求或额外探测握手；正常 TLS 验证、内存 mTLS 和取消语义仍生效。当前 `2-only` 仅支持直连及 `http://` CONNECT 代理（含 Basic 代理认证），HTTPS/SOCKS 等其他代理 scheme 显式报错，不悄悄直连。明文 URL 或成功握手却没有协商 H2 时可用 `errors.Is(err, ErrHTTP2Unavailable)` 判断；拨号、TLS 验证、握手和 context 错误保留自身原因，不一律替换成协议错误。其他版本值返回参数错误。Raw 字节路径不应用这些协议策略；设置 `HTTPVersion` 不会改写 Raw。
+
+### 有界连接复用（显式启用）
+
+```go
+engine, err := netloom.New(netloom.Config{
+    ConnectionPool: &netloom.ConnectionPoolConfig{
+        MaxClients:  32,
+        IdleTimeout: 30 * time.Second,
+    },
+})
+```
+
+- `ConnectionPool=nil` 保持原来的每次尝试新客户端、用完关闭行为；非 nil 配置中 MaxClients=0 默认 64，IdleTimeout=0 默认 30 秒，负值令 New 返回错误。New 复制配置，后续修改原配置不影响 Engine。
+- 每个 Engine 独立管理池。MaxClients 同时约束活跃、空闲、创建中的客户端和不可缓存的一次性租约；仅驱逐空闲 LRU 项，全部忙时等待租约或 context 结束，不绕过容量上限创建临时客户端。此等待包含在单次 Request.Timeout、HeadersMS/TotalMS 内，而不是并发槽/限流的 QueueMS。原有 Threads/MaxConcurrentPerHost 限制仍生效。
+- 客户端独占租约持续到 Body 关闭，H1/H2 可顺序复用连接；暂不支持同一客户端并发 H2 multiplexing。MaxClients 是客户端/租约上限，不是对第三方后端所有瞬时 TCP socket 数的严格承诺。每个客户端只绑定一个精确 scheme+URL.Host，避免其内部跨 origin 缓存无界增长；隐式/显式默认端口可能分成不同项。
+- 缓存还按代理 URL（含认证）、代理有效毫秒超时、VerifyTLS 和协议策略隔离。直连超时由每次 context 管理，不因 Request.Timeout 不同拆池；`auto`、空值和 `2` 可共享相同配置。Header、正文不进入 key，按每次请求发送；不记录/导出含凭据的内部 key。
+- 首版只缓存没有显式 Profile、TLSConfig=nil，且直连或使用 `http://` 代理的请求。其他代理 scheme 使用一次性租约，不缓存第三方后端的 H2 重连状态。nethttp.BuildRequest 的空 TLSProfile 保留零 Profile，使用 Engine 的默认快照；非空名称会显式选择 Profile，因此走一次性租约。默认 Profile 在传输初始化时复制集合并固定；显式/自定义 Profile、任意非 nil TLSConfig（含自定义信任根或 mTLS）和 `2-only` 使用同一容量约束下的一次性租约，不依据不完整的指纹标签、证书指针或私钥散列复用。Profile 的工厂/闭包及调用方提供的 TLS 对象仍必须保持不可变，禁止并发修改。
+- `Request.FreshConnection=true`（输入适配器同名字段）禁止该次尝试借用空闲客户端，并在完成后关闭；仍受容量、代理和拨号安全策略约束，不清空其他请求的空闲池。
+- IdleTimeout 用于后端空闲 socket 回收及下次获取时的过期条目清理；不启动后台清理服务。成功且完整采集的缓冲请求、观察 EOF 后正常 Close 的流可归还缓存；正文截断、读取失败和流提前关闭会丢弃客户端。EOF 后必须 Close 才归还租约，取消/context 到期或 Engine.Close 也会释放租约。
+- CookieJar 保留原来的 host（含显式端口）会话隔离；LRU 驱逐客户端不会清空 Cookie。Cookie jar 存储与客户端池独立，目前没有独立容量限制，不能将 MaxClients 当作全部会话内存上限。Raw 不使用此池。
+- 直连及 HTTP CONNECT 的底层连接按当前独占租约绑定 context，覆盖第三方 H2 后台重连的 TCP/TLS/初始化；请求结束成功归还前解除旧取消回调，避免一次请求取消误关后续租约。过期 H2 连接重拨不会获得脱离请求预算的后台握手。
+- 复用响应仍从实际连接读取 TLS/IP，不复制上次的 DNS/Connect/TLS timings；复用时没有发生的阶段保持 nil。代理路径不将代理 TCP peer 冒充目标出口 IP。
 
 ### 失败与部分响应
 
@@ -56,7 +92,7 @@ StreamResponse.Status() 返回线程安全、可独立修改的 StreamStatus 快
 - Finished 在 EOF、读取错误或关闭时置位；BodyMS/TotalMS 此时冻结，之前为零。流式 QueueMS 单独记录并发槽/限流等待，不计入 TotalMS。
 - Closed 表示 Body 已关闭；Error 记录读取失败、上下文取消，或提前 Close 的 ErrStreamClosedEarly。读取到 EOF 后正常 Close 不改写完成状态；Close 本身仍返回底层关闭错误。
 - Status 可与单个读取者及 Close 并发调用，不允许多个 goroutine 同时读取 Body。EOF 不释放并发槽，仍须显式 Close。
-Raw 不使用 CookieJar；Raw+Proxy 目前明确报错，防止悄悄绕过代理直连。普通和流式路径支持 tls-client 的代理配置。
+Raw 不使用 CookieJar；Raw+Proxy 目前明确报错，防止悄悄绕过代理直连。普通和流式的非严格协议模式保留 tls-client 的代理 scheme 支持。HTTP CONNECT 交换使用自有 context-aware 拨号器：取消同时关闭进行中的代理 socket，CONNECT 响应头上限 64 KiB，代理 URL 禁止非根路径/query/fragment，认证只发往代理。HTTPS/SOCKS 等其他 scheme 仍依赖第三方拨号器，其连接/代理握手部分可能只遵守固定正值超时而非实时 context 取消；尚不宣称这些路径与 HTTP CONNECT 有同等取消保证。
 
 ## 所有权、背压与关闭
 
@@ -71,7 +107,7 @@ Run 返回有界结果通道；消费者须持续读取或取消上下文。Subm
 Context.Next 支持嵌套的前后处理；当前实现也会继续执行未显式 Next 的后续处理器。要终止必须 Abort。
 Run 和独立 Send 的限流器分别计数；并非跨所有入口的统一速率配额。
 
-Engine.Close 幂等，阻止新工作，取消已有请求及队列、关闭活动流，并等待工作退出。
+Engine.Close 幂等，阻止新工作，取消已有请求及队列、关闭活动流，唤醒租约等待者，并在工作退出后关闭池内空闲连接。
 请勿在本 Engine 的 Pipeline 处理器内调用 Close；应取消上下文，由拥有 Engine 的外层关闭。
 自定义处理器若忽略上下文并永久阻塞，Close 同样会等待它退出。
 

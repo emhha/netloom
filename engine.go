@@ -48,15 +48,24 @@ func WithLogger(l *slog.Logger) EngineOption {
 	}
 }
 
-// New builds an Engine from cfg. It never panics; the only error path is
-// reserved for future fingerprint-backend initialization.
+// New builds an Engine from cfg and validates optional connection pool limits.
 func New(cfg Config, opts ...EngineOption) (*Engine, error) {
 	cfg = cfg.withDefaults()
+	tlsT := newTLSTransportWithJar(cfg.MaxBodySize, cfg.CookieJar)
+	if cfg.ConnectionPool != nil {
+		poolConfig := *cfg.ConnectionPool
+		pool, err := newClientPool(poolConfig)
+		if err != nil {
+			return nil, err
+		}
+		cfg.ConnectionPool = &poolConfig
+		tlsT.pool = pool
+	}
 	lifetime, stop := context.WithCancel(context.Background())
 	e := &Engine{
 		cfg:      cfg,
 		lifetime: lifetime, stop: stop,
-		tlsT:        newTLSTransportWithJar(cfg.MaxBodySize, cfg.CookieJar),
+		tlsT:        tlsT,
 		rawT:        newRawTransport(cfg.MaxBodySize),
 		logger:      slog.Default(),
 		sendLimiter: newRateLimiter(cfg.RatePerSecond, cfg.RatePerMinute),
@@ -238,5 +247,8 @@ func (e *Engine) Close() error {
 	e.stop()
 	e.mu.Unlock()
 	e.active.Wait()
+	if t, ok := e.tlsT.(*tlsTransport); ok && t.pool != nil {
+		t.pool.close()
+	}
 	return nil
 }

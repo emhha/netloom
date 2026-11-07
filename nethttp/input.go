@@ -17,6 +17,7 @@ type RequestInput struct {
 	FollowRedirects  bool                `json:"follow_redirects,omitempty"`
 	MaxRedirects     int                 `json:"max_redirects,omitempty"`
 	HTTPVersion      string              `json:"http_version,omitempty"`
+	FreshConnection  bool                `json:"fresh_connection,omitempty"`
 	TLSProfile       string              `json:"tls_profile,omitempty"`
 	InsecureTLS      bool                `json:"insecure_tls,omitempty"`
 }

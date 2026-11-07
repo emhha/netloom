@@ -1,6 +1,10 @@
 package netloom
 
-import "github.com/bogdanfinn/tls-client/profiles"
+import (
+	"github.com/bogdanfinn/tls-client/profiles"
+	"maps"
+	"slices"
+)
 
 // ProfileByName resolves a tls-client browser profile from its registry name
 // (e.g. "chrome_131", "firefox_120", "safari_16_0"). An empty or unknown name
@@ -25,6 +29,26 @@ func KnownProfile(name string) bool {
 	}
 	_, ok := profiles.MappedTLSClients[name]
 	return ok
+}
+
+// cloneClientProfile snapshots exported profile collections. Factories and any
+// captured state still have to be immutable, as do caller-supplied profiles.
+func cloneClientProfile(p profiles.ClientProfile) profiles.ClientProfile {
+	id := p.GetClientHelloId()
+	if id.Seed != nil {
+		seed := *id.Seed
+		id.Seed = &seed
+	}
+	if id.Weights != nil {
+		weights := *id.Weights
+		id.Weights = &weights
+	}
+	header := p.GetHeaderPriority()
+	if header != nil {
+		h := *header
+		header = &h
+	}
+	return profiles.NewClientProfile(id, maps.Clone(p.GetSettings()), slices.Clone(p.GetSettingsOrder()), slices.Clone(p.GetPseudoHeaderOrder()), p.GetConnectionFlow(), slices.Clone(p.GetPriorities()), header, p.GetStreamID(), p.GetAllowHTTP(), maps.Clone(p.GetHttp3Settings()), slices.Clone(p.GetHttp3SettingsOrder()), p.GetHttp3PriorityParam(), slices.Clone(p.GetHttp3PseudoHeaderOrder()), p.GetHttp3SendGreaseFrames())
 }
 
 // profileOrDefault returns p unless it is the zero ClientProfile, in which case

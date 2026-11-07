@@ -134,14 +134,23 @@ func BuildRequest(in RequestInput) (*netloom.Request, error) {
 		}
 		headers.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(in.BasicAuth.Username+":"+in.BasicAuth.Password)))
 	}
-	if in.HTTPVersion != "" && in.HTTPVersion != "auto" && in.HTTPVersion != "1.1" {
-		return nil, errors.New("http_version 支持 auto 或 1.1")
+	switch in.HTTPVersion {
+	case "", "auto", "1.1", "2", "2-only":
+	default:
+		return nil, errors.New("http_version 支持 auto、1.1、2 或 2-only")
+	}
+	if in.HTTPVersion == "2-only" && u.Scheme != "https" {
+		return nil, errors.New("http_version 2-only 需要 HTTPS；不支持 h2c")
 	}
 	if !netloom.KnownProfile(in.TLSProfile) {
 		return nil, errors.New("未知 TLS 指纹配置")
 	}
-	return &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion,
-		Profile: netloom.ProfileByName(in.TLSProfile), VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}, nil
+	request := &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion, FreshConnection: in.FreshConnection,
+		VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}
+	if in.TLSProfile != "" {
+		request.Profile = netloom.ProfileByName(in.TLSProfile)
+	}
+	return request, nil
 }
 
 func requestBody(in RequestInput, headers http.Header) ([]byte, error) {

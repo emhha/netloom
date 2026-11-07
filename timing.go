@@ -2,6 +2,7 @@ package netloom
 
 import (
 	"context"
+	"net"
 	"sync"
 	"time"
 
@@ -44,6 +45,28 @@ type observation struct {
 	start, dns, connect, handshake time.Time
 	timings                        Timings
 	tls                            *TLSInfo
+	ip                             string
+	proxy                          bool // proxy peer is not the target's egress IP
+}
+
+func recordConnectedIP(ctx context.Context, conn net.Conn) {
+	if o, ok := ctx.Value(observationKey{}).(*observation); ok && conn != nil {
+		if addr := conn.RemoteAddr(); addr != nil {
+			if host, _, err := net.SplitHostPort(addr.String()); err == nil {
+				o.mu.Lock()
+				if !o.proxy {
+					o.ip = host
+				}
+				o.mu.Unlock()
+			}
+		}
+	}
+}
+
+func (o *observation) connectedIP() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.ip
 }
 
 func milliseconds(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }
@@ -75,6 +98,7 @@ func observe(ctx context.Context, start time.Time) (context.Context, *observatio
 			}
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
+			recordConnectedIP(context.WithValue(ctx, observationKey{}, o), info.Conn)
 			if c, ok := info.Conn.(interface{ ConnectionState() tls.ConnectionState }); ok {
 				o.mu.Lock()
 				o.tls = buildTLSInfo(c.ConnectionState())

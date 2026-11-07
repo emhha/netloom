@@ -45,6 +45,8 @@ func main() {
 
 `Send` 返回已读取并关闭的响应；`SendStream` 的调用方必须关闭 `Body`。`Engine.Close` 取消工作并等待退出。更多用法见 [示例](examples/README.md) 和 [API 与配置](docs/API.md)。
 
+HTTP/HTTPS 请求可用 `HTTPVersion: "2"` 表示偏好 H2、允许 H1 降级，或用 `"2-only"` 要求在同一 TLS 连接确认 ALPN=h2 后才发送 HTTP。连接复用默认关闭；设置 `Config.ConnectionPool` 显式启用有界、按 origin 隔离的客户端租约，`Request.FreshConnection` 可按次绕过缓存。首版采用独占租约与顺序复用，并非同客户端 H2 并发 multiplexing；严格模式代理范围和缓存身份限制见 [API 与配置](docs/API.md)。
+
 ## 能力与包
 
 | 层次 | 包 | 用途 |

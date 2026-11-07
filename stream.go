@@ -89,18 +89,24 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 		}
 	}()
 	ctx, observation := observe(ctx, start)
-	client, connectedIP, err := transport.buildClient(req)
+	observation.proxy = req.Proxy != ""
+	lease, err := transport.acquireClient(ctx, req)
 	if err != nil {
 		release()
 		return nil, err
 	}
+	client := lease.client
+	defer func() {
+		if !owned {
+			lease.release(false)
+		}
+	}()
 	method := req.Method
 	if method == "" {
 		method = "GET"
 	}
 	request, err := http.NewRequestWithContext(ctx, method, req.URL, bytes.NewReader(req.Body))
 	if err != nil {
-		client.CloseIdleConnections()
 		release()
 		return nil, err
 	}
@@ -109,16 +115,15 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 		request.Header = make(http.Header)
 	}
 	applyHeaderOrder(request, req.HeaderOrder)
-	response, err := client.Do(request)
+	response, err := transport.doRequest(client, req, request)
 	if err != nil {
-		client.CloseIdleConnections()
 		release()
 		return nil, fmt.Errorf("netloom.SendStream: %w", err)
 	}
 	meta := &Response{RequestHeaders: request.Header.Clone(), StatusCode: response.StatusCode, Header: response.Header,
 		ContentLength: response.ContentLength, ContentType: response.Header.Get("Content-Type"),
 		WebServer: response.Header.Get("Server"), Location: response.Header.Get("Location"),
-		CSP: response.Header.Get("Content-Security-Policy"), IP: *connectedIP,
+		CSP: response.Header.Get("Content-Security-Policy"), IP: observation.connectedIP(),
 		Scheme: request.URL.Scheme, HTTPVersion: response.Proto, ResponseTime: time.Since(start),
 	}
 	timing, actualTLS := observation.snapshot()
@@ -129,9 +134,16 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	if response.TLS != nil {
 		meta.TLS = buildTLSInfo(*response.TLS)
 	}
-	body := &streamBody{ReadCloser: response.Body, ctx: ctx,
+	var body *streamBody
+	body = &streamBody{ReadCloser: response.Body, ctx: ctx,
 		start: start, headersAt: time.Now(), status: StreamStatus{Timings: cloneTimings(timing)},
-		cleanup: func() { cancelTimeout(); client.CloseIdleConnections(); release(); finish() }}
+		cleanup: func() {
+			status := body.snapshot()
+			lease.release(status.Complete && status.Error == nil && body.err == nil)
+			cancelTimeout()
+			release()
+			finish()
+		}}
 	owned = true
 	context.AfterFunc(ctx, func() { _ = body.Close() })
 	return &StreamResponse{Response: meta, Body: body, body: body}, nil

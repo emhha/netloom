@@ -16,6 +16,7 @@ import (
 
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
+	"github.com/bogdanfinn/tls-client/profiles"
 	tls "github.com/bogdanfinn/utls"
 )
 
@@ -59,7 +60,9 @@ type tlsTransport struct {
 	// different hosts, so scanning many targets cannot leak cookies across
 	// sites. When nil (the default) clients are built without a jar, matching
 	// the previous stateless behaviour exactly.
-	cookies *cookieStore
+	cookies        *cookieStore
+	pool           *clientPool
+	defaultProfile profiles.ClientProfile
 }
 
 // cookieStore owns the per-host CookieJar map and its guard mutex. It is a
@@ -81,7 +84,7 @@ func newTLSTransportWithJar(maxBody int, cookieEnabled bool) *tlsTransport {
 	if maxBody <= 0 {
 		maxBody = defaultMaxBodySize
 	}
-	t := &tlsTransport{maxBody: maxBody, resolver: net.DefaultResolver}
+	t := &tlsTransport{maxBody: maxBody, resolver: net.DefaultResolver, defaultProfile: cloneClientProfile(profiles.DefaultClientProfile)}
 	if cookieEnabled {
 		t.cookies = &cookieStore{jars: make(map[string]tls_client.CookieJar)}
 	}
@@ -98,27 +101,27 @@ func (t *tlsTransport) guardDialer() func(ctx context.Context, network, addr str
 	return guardedDialContext(base, t.resolver)
 }
 
-// buildClient constructs a tls-client HttpClient for a single request. The
-// client is short-lived (one request) so per-request Profile/Proxy/Timeout are
-// honoured without shared mutable state. connectedIP is updated by the guarded
-// dialer on connect so the final hop's IP can be reported.
-func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string, error) {
-	var connectedIP string
+// buildClient constructs an immutable-config client, leased to one request at
+// a time. Connection evidence is recorded per request, never in a client closure.
+func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_client.HttpClient, error) {
 	guard := t.guardDialer()
 	dialCapture := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, err := guard(ctx, network, addr)
 		if err != nil {
 			return nil, err
 		}
-		if ra := conn.RemoteAddr(); ra != nil {
-			if host, _, e := net.SplitHostPort(ra.String()); e == nil {
-				connectedIP = host
-			}
-		}
+		recordConnectedIP(ctx, conn)
 		return conn, nil
 	}
 
 	transportOptions := &tls_client.TransportOptions{DisableCompression: true}
+	if t.pool != nil {
+		idleTimeout := t.pool.idleTimeout
+		transportOptions.IdleConnTimeout = &idleTimeout
+		transportOptions.MaxIdleConns = 1
+		transportOptions.MaxIdleConnsPerHost = 1
+		transportOptions.MaxConnsPerHost = 1
+	}
 	if req.TLSConfig != nil {
 		transportOptions.RootCAs = req.TLSConfig.Roots
 		transportOptions.Certificates = req.TLSConfig.Certificates
@@ -129,18 +132,16 @@ func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string
 	// so proxy clients need a positive (rounded-up) fallback as well.
 	var clientTimeoutMS int
 	if req.Proxy != "" {
-		timeout := req.Timeout
-		if timeout <= 0 {
-			timeout = dialTimeout
-		}
-		clientTimeoutMS = int(timeout / time.Millisecond)
-		if timeout%time.Millisecond != 0 {
-			clientTimeoutMS++
-		}
+		clientTimeoutMS = proxyTimeoutMilliseconds(req.Timeout)
+	}
+	profile := req.Profile
+	id := profile.GetClientHelloId()
+	if id.IsSet() {
+		profile = profileOrDefault(t.defaultProfile)
 	}
 	opts := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutMilliseconds(clientTimeoutMS),
-		tls_client.WithClientProfile(profileOrDefault(req.Profile)),
+		tls_client.WithClientProfile(profile),
 		// Redirects are surfaced to the caller (Location header) rather than
 		// followed transparently, so the dial guard re-validates each hop and
 		// the redirect chain stays observable.
@@ -151,22 +152,29 @@ func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string
 		opts = append(opts, tls_client.WithInsecureSkipVerify())
 	}
 	switch req.HTTPVersion {
-	case "", "auto":
+	case "", "auto", "2", "2-only":
 		opts = append(opts, tls_client.WithDisableHttp3())
 	case "1.1":
 		opts = append(opts, tls_client.WithForceHttp1())
 	default:
-		return nil, nil, fmt.Errorf("netloom: HTTP version must be auto or 1.1")
+		return nil, fmt.Errorf("netloom: HTTP version must be auto, 1.1, 2 or 2-only")
 	}
 
 	if req.Proxy != "" {
-		// tls-client forbids combining WithDialContext with WithProxyUrl: the
-		// proxy owns the CONNECT handshake and egress resolution. Egress IP
-		// filtering is then the proxy's responsibility; the network-layer SSRF
-		// guard only applies to direct dials.
-		opts = append(opts, tls_client.WithProxyUrl(req.Proxy))
+		// The proxy owns egress resolution/filtering; direct-dial guarding does
+		// not apply to its tunnel. For HTTP proxies replace the dependency's
+		// CONNECT exchange, which otherwise ignores cancellation while reading
+		// its response. Use only WithDialContext for this case: tls-client rejects
+		// combining it (or a proxy factory) with WithProxyUrl. The request/key
+		// retain the actual proxy URL; this private client never exports GetProxy.
+		if u, err := url.Parse(req.Proxy); err == nil && u.Scheme == "http" {
+			dialer := &httpProxyContextDialer{proxyURL: req.Proxy}
+			opts = append(opts, tls_client.WithDialContext(scope.wrapDial(dialer.DialContext)))
+		} else {
+			opts = append(opts, tls_client.WithProxyUrl(req.Proxy))
+		}
 	} else {
-		opts = append(opts, tls_client.WithDialContext(dialCapture))
+		opts = append(opts, tls_client.WithDialContext(scope.wrapDial(dialCapture)))
 	}
 
 	if jar := t.jarFor(req); jar != nil {
@@ -175,9 +183,29 @@ func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("netloom.tlsTransport: new client: %w", err)
+		return nil, fmt.Errorf("netloom.tlsTransport: new client: %w", err)
 	}
-	return client, &connectedIP, nil
+	return client, nil
+}
+
+// doRequest pins the Engine's default profile snapshot for strict H2 too.
+func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hreq *http.Request) (_ *http.Response, returnErr error) {
+	defer func() {
+		if returnErr != nil {
+			if cause := requestContextError(hreq.Context()); cause != nil {
+				returnErr = cause
+			}
+		}
+	}()
+	if req.HTTPVersion == "2-only" {
+		requestCopy := *req
+		id := requestCopy.Profile.GetClientHelloId()
+		if id.IsSet() {
+			requestCopy.Profile = profileOrDefault(t.defaultProfile)
+		}
+		req = &requestCopy
+	}
+	return doHTTPRequest(client, req, hreq)
 }
 
 func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, error) {
@@ -189,11 +217,14 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	defer cancel()
 	start := time.Now()
 	ctx, observation := observe(ctx, start)
-	client, connectedIP, err := t.buildClient(req)
+	observation.proxy = req.Proxy != ""
+	lease, err := t.acquireClient(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	defer client.CloseIdleConnections()
+	reusable := false
+	defer func() { lease.release(reusable) }()
+	client := lease.client
 
 	method := req.Method
 	if method == "" {
@@ -213,7 +244,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	}
 	applyHeaderOrder(hreq, req.HeaderOrder)
 
-	hresp, err := client.Do(hreq)
+	hresp, err := t.doRequest(client, req, hreq)
 	if err != nil {
 		return nil, fmt.Errorf("netloom.tlsTransport: %w", err)
 	}
@@ -231,7 +262,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 		ContentType:    hresp.Header.Get("Content-Type"),
 		Location:       hresp.Header.Get("Location"),
 		CSP:            hresp.Header.Get("Content-Security-Policy"),
-		IP:             *connectedIP,
+		IP:             observation.connectedIP(),
 	}
 	delete(resp.RequestHeaders, http.HeaderOrderKey)
 
@@ -267,6 +298,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 			}
 		}
 	}
+	reusable = !resp.BodyTruncated
 	return resp, nil
 }
 

@@ -20,6 +20,14 @@ go test . -run '^Test(Reliability|PartialResponse)' -count=1
 
 这些默认测试使用 fake transport 或本地可控 HTTP/TLS 服务，覆盖请求/配置/context 超时（含正文阻塞与亚毫秒期限）、失败时的部分响应、重试后证据保留、实际 TLS 连接次数与证书、流式 EOF/提前关闭/读取失败状态，以及 Engine.Close 中断读取。它们不访问外网，不替代真实代理/外部目标验收。流式状态并发读取和关闭路径同时由 race 检查。
 
+## 连接池与 HTTP/2 回归
+
+```sh
+go test -race . ./nethttp -run 'Test(ConnectionPool|ClientDialScope|HTTP|BuildRequest)' -count=5
+```
+
+本地服务覆盖 H1/H2 缓冲与流式顺序复用、实际 IP/证书/缺失阶段 timings、默认不复用与按次 FreshConnection、origin/验证开关/代理超时隔离、自定义 Profile/信任根一次性使用、客户端容量/空闲 LRU/TTL、等待取消、EOF 租约所有权、失败释放、Cookie 会话与客户端驱逐的独立生命周期，以及 Engine.Close 实际关闭空闲 socket。严格 H2 用例检查 ALPN 失败前无 HTTP/1 请求，含明文/无 ALPN/H1-only 目标、自定义信任/mTLS 和代理/取消；HTTP CONNECT 用例验证早期限/显式取消/Engine.Close 后 socket 关闭、认证不泄漏、响应头上限及预读字节保留。过期 H2 重连用例先完成真实 H2 请求、断开旧连接，再阻塞新 TLS 握手，检查缓冲/流式的超时、取消和 Close 不因依赖的后台 context 而卡住。ClientDialScope 另测旧 lease 取消不误关空闲连接及过时 dial 不可归入新 lease。这些不是外部网络或性能验收。
+
 ## 并发检查
 
 ```sh

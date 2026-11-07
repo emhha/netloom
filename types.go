@@ -28,9 +28,14 @@ type Request struct {
 	// derive the dial target (host:port, scheme).
 	Raw []byte
 
+	// HTTPVersion is auto (or empty), 1.1, 2 (prefer with fallback), or
+	// 2-only (HTTPS with mandatory H2 ALPN before sending HTTP bytes).
 	HTTPVersion string
-	TLSConfig   *TLSOptions `json:"-"`
-	VerifyTLS   bool        // opt-in verification; scan callers retain their existing default
+	// FreshConnection bypasses idle client reuse for this attempt and closes
+	// its client afterward. It does not bypass pool capacity or the dial guard.
+	FreshConnection bool
+	TLSConfig       *TLSOptions `json:"-"`
+	VerifyTLS       bool        // opt-in verification; scan callers retain their existing default
 
 	// Profile carries the tls-client browser fingerprint (JA3/JA4, HTTP/2
 	// SETTINGS, header order). The zero value selects profiles.DefaultClientProfile.

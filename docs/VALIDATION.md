@@ -68,3 +68,30 @@ go test -race -tags=integration . -run '^Test(Reliability(BodyTimeout|ProxyBodyT
 早期检查曾因构建缓存只读被沙箱阻止，不能算通过；最终在允许写入缓存的执行环境完成以上命令。未修改全局 Go 配置，未运行外部 Cookie 服务、真实付费 API 或远程目标测试。
 
 本阶段不证明连接池复用/隔离、显式 H2 策略、HTTP/3 或高级 DNS/路由能力已经实现。Raw 尚未提供普通路径的完整 Timings；缓冲 QueueMS 暂不测量。
+
+## 2026-11-07：阶段 2A 连接池与 HTTP/2
+
+工具链：Go 1.26.3 linux/amd64、Python 3.14.8。完整执行并退出码 0：
+
+```sh
+make check && make race && make integration-compile && make integration-local && git diff --check
+```
+
+- `make check`：格式、文档/仓库检查、17 个 Python 离线测试、50 个固定字典文件校验、全包测试、vet、build 通过。
+- `make race`：全包通过，无已报告数据竞争。
+- `make integration-compile`：所有集成测试编译通过。
+- `make integration-local`：本地 TLS/mTLS、代理、流式生命周期集成通过；仍明确排除外部 Python Cookie 服务。
+- `git diff --check`：通过。
+
+定向重复验证（均退出码 0）：
+
+```sh
+go test -race . ./nethttp -run 'Test(ConnectionPool|ClientDialScope|HTTP|BuildRequest)' -count=5
+go test -race . -run '^Test(ClientDialScope|ConnectionPoolStaleHTTP2)' -count=10 -timeout=45s
+```
+
+覆盖 H1/H2 缓冲与流式顺序复用、默认不复用、FreshConnection、容量等待/取消、空闲 LRU/TTL、origin/代理/验证配置隔离、自定义 TLS/Profile 一次性租约、Cookie 会话与客户端驱逐独立、EOF/提前关闭/读取失败释放，以及实际连接 IP/TLS/timings。适配层验证显式 H2 值、FreshConnection 和隐式默认 Profile。严格 H2 使用同一次 TLS 握手的真实 ALPN：H1/no-ALPN/明文目标收到零次 HTTP 请求；本地 H2、自定义信任/mTLS、Cookie/URL BasicAuth、HTTP CONNECT 认证与取消通过。
+
+中间失败/审查问题均修复后重跑：HTTP 代理接线曾同时设置两个不兼容的第三方选项，配置校验失败；CONNECT 取消有时被暴露为 socket 错误而非 context 因果链；底层 H2 过期连接重拨使用 background context，可能在 TLS 初始化时无限等待。最终 HTTP CONNECT 采用自有 context-aware 交换，拨号/握手错误按有效 context 归因，原始连接按当前独占租约绑定取消，并在成功归还前等待旧取消回调结束。重连回归先完成真实 H2 请求、关闭旧连接，再让新连接停在 TLS 握手，缓冲/流式的请求期限、取消与 Engine.Close 均在 race 下连续 10 次通过，且观察到 stalled socket 关闭；不是只验证外层调用提早返回。
+
+范围限制：默认不启用池；MaxClients 约束客户端条目/租约而不是所有 TCP socket 的精确总数。首版不提供同客户端 H2 并发 multiplexing，不缓存显式 Profile、TLSOptions、严格 H2 或非 HTTP 代理 scheme，Cookie 会话内存未设独立上限。严格 H2 仅直连及 HTTP CONNECT；非严格模式保留其他代理 scheme，但其第三方拨号器仍有实时取消限制。未验证外部网络、外部 Cookie 服务、HTTP/3、阶段超时/结构化阶段错误或性能收益；阶段 2B 及后续能力仍是计划。

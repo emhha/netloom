@@ -32,6 +32,22 @@ type Config struct {
 	// the historical behaviour. rawTransport is unaffected (it writes raw
 	// bytes, not through the fhttp client).
 	CookieJar bool
+
+	// ConnectionPool opts into bounded, origin-scoped client reuse. Nil retains
+	// the historical fresh-client-per-attempt behavior. See ConnectionPoolConfig.
+	ConnectionPool *ConnectionPoolConfig
+}
+
+// ConnectionPoolConfig bounds both cached clients and active client leases.
+// Each client is leased exclusively until the response body is closed; this
+// first implementation reuses H2 connections sequentially, not multiplexed.
+// Custom/explicit profiles, TLSOptions, strict H2 and non-HTTP proxy schemes
+// use uncached leases under the same capacity bound. Cookie session storage has
+// a separate lifecycle.
+// The configuration is copied by New and must not be mutated concurrently.
+type ConnectionPoolConfig struct {
+	MaxClients  int           // default 64; includes active, idle and uncached clients
+	IdleTimeout time.Duration // default 30s; socket idle timeout and idle entry TTL
 }
 
 func (c Config) withDefaults() Config {
