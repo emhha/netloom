@@ -138,3 +138,27 @@ make check && make race && make integration-compile && make integration-local &&
 生产地址保护开启的 planner 测试使用受控本机 UDP DNS 与模拟最终 literal 拨号，检验 family 过滤、IPv4-mapped 规范化、受阻实际 IP、允许 RFC1918、候选顺序/预算/无隐式 DNS 回退。受阻逻辑 IP 在池获取前检查；末尾点等规范等价拼写不绕过保护。独立审查发现末尾点 IP 检查不一致及混合候选错误禁用重试，修复后新增规范逻辑 IP 拦截和两种候选顺序下允许地址临时失败后重试成功回归，再通过上述完整检查。适配输入覆盖 JSON、规则上限/重复/无效字段与深拷贝。
 
 范围限制：仅直连映射，不支持代理端解析/出口 family、自定义 DNS server 配置、Happy Eyeballs 或新 TLS 参数；任何非零策略与代理均明确拒绝。默认 nil/空/auto 保持旧行为。真实证书/协议测试仅测试内部禁用地址类别保护以访问本机，不能据此声称允许生产访问 loopback；保护开启的 DNS/family 验证不向文档地址实际发包。未执行外部 Cookie 服务、远端代理/目标或性能验收。TLS min/max、显式 ServerName 与 pinning 仍属后续阶段 3B。
+
+## 2026-11-07：阶段 3B 实际握手 TLS 控制
+
+工具链：Go 1.26.3 linux/amd64、Python 3.14.8。执行并通过：
+
+```sh
+go test -race . ./nethttp -run '^Test(TLSControls|BuildRequestTLS)' -count=5 -timeout=90s
+make check && make race && make integration-compile && make integration-local && git diff --check
+```
+
+- `make check`：仓库/文档/格式检查、17 个 Python 离线测试、50 个固定字典文件、全包测试/vet/build 通过；根包测试 16.093s。
+- `make race`：全包通过，根包 16.943s，无已报告数据竞争。
+- `make integration-compile`：集成用例编译通过；`make integration-local`：本地集成真实执行通过，根包 12.226s，明确排除外部 Python Cookie 服务。
+- TLS 定向 race 连续 5 次通过；新增控制路径生命周期回归另连续 3 次 race 通过。记录追加后重新检查文档/格式。
+
+本地实际 TLS socket 矩阵覆盖 TLS1.2/1.3 精确范围、H1/H2/严格 H2 的缓冲/流式及 Raw，断言一请求只建一连接、无 DNS/探测握手、实际响应与 TLS 元数据一致；客户端版本上限不能向仅 1.3 服务降级。显式 DNS ServerName 与逻辑 Host 分离，IP 名验证 IP SAN 且不发 SNI；错误 CA/名称、错误 pin 在 HTTP 请求前失败。叶 SPKI hash 与多个候选单独检查，issuer hash 不能冒充 leaf；同主机顺序/并发相反 pin 不串用。
+
+自定义 Profile 内嵌 SNI、缺少 SNI 与 IP 名另有真实握手回归；复核发现 pins-only 情况下内嵌 SNI 可覆盖逻辑验证名，现已在所有非零控制路径协调实际 SNI extension/config，补充真实错误名称与握手状态断言。版本过滤同时收窄 preset bounds 和 SupportedVersions，保留 GREASE/顺序；无交集、重复 supported-version extension、显式 Profile 冲突提前失败。内建 ID 的 nil/占位 SpecFactory 使用依赖一致的内建 preset 后备路径，不 panic 或误报缺失实现。
+
+HTTP CONNECT 验证实际 origin TLS 版本/名称与正确/错误 pin；Raw 仍拒绝代理且不建连接。Do 跨 origin 清除整个 TLSConfig，原始调用方对象不变。新控制下的 TLS/header/body 阻塞、调用方取消 cause、实际 socket 关闭、单槽池回收及 Cookie 逻辑 origin 隔离覆盖 H1/H2/严格 H2。nethttp 输入检查 nil/null/空对象、版本/名称/pin 边界与双向复制。
+
+中间验证中的 Raw CONNECT 正向用例错误假设新增代理支持，改为保留既有拒绝边界并检查零连接；策略单元测试也发现内建 ID 可能携带返回错误的占位 SpecFactory，已修复为与 uTLS 相同的 factory-to-built-in 回退并重跑。最终完整检查没有跳过上述本地回归。
+
+范围限制：不证明 TLS1.0/1.1 在默认 Profile 可用，不承诺改变版本范围后浏览器指纹等价、HTTP/3 或外部代理/目标兼容性；新控制仅 HTTPS 直连/HTTP CONNECT，Raw 仍无代理。显式 DNS ServerName+无 SNI Profile 冲突在 HTTP 应用字节前失败，但可能已经建立 TCP/CONNECT；只有语法、显式 Profile+版本和空版本交集等提前检查保证不拨号。普通/流式使用有界客户端租约，Raw 保留独立 socket 生命周期。未执行外部 Cookie 服务、远端代理、付费服务或性能验收。

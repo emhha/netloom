@@ -12,6 +12,17 @@ type PhaseTimeoutsInput struct {
 	TotalMS          int64 `json:"total_ms,omitempty"`
 }
 
+// TLSInput exposes TLS test controls only; trust roots and client credentials
+// remain native Go TLSOptions and are never accepted through this JSON object.
+// Omission inherits the existing profile behavior; an empty object retains an
+// explicit, nonnil TLS configuration without enabling additional controls.
+type TLSInput struct {
+	MinVersion       netloom.TLSVersion `json:"min_version,omitempty"`
+	MaxVersion       netloom.TLSVersion `json:"max_version,omitempty"`
+	ServerName       string             `json:"server_name,omitempty"`
+	PinnedPublicKeys []string           `json:"pinned_public_keys,omitempty"`
+}
+
 type RequestInput struct {
 	MaxResponseBytes int64                   `json:"max_response_bytes,omitempty"`
 	Stream           bool                    `json:"stream,omitempty"`
@@ -32,6 +43,7 @@ type RequestInput struct {
 	MaxRedirects     int                     `json:"max_redirects,omitempty"`
 	HTTPVersion      string                  `json:"http_version,omitempty"`
 	FreshConnection  bool                    `json:"fresh_connection,omitempty"`
+	TLS              *TLSInput               `json:"tls,omitempty"`
 	TLSProfile       string                  `json:"tls_profile,omitempty"`
 	InsecureTLS      bool                    `json:"insecure_tls,omitempty"`
 }

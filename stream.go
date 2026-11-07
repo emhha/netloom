@@ -70,6 +70,10 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 	// without mutating the caller's request. The context covers body reads.
 	requestCopy := *req
 	requestCopy.Network = req.Network.Clone()
+	requestCopy.TLSConfig = req.TLSConfig.Clone()
+	if err := validateTLSRequest(&requestCopy); err != nil {
+		return nil, err
+	}
 	if _, err := withNetworkOptions(ctx, &requestCopy); err != nil {
 		return nil, err
 	}

@@ -214,6 +214,10 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response, error) {
 	request := *req
 	request.Network = req.Network.Clone()
+	request.TLSConfig = req.TLSConfig.Clone()
+	if err := validateTLSRequest(&request); err != nil {
+		return nil, err
+	}
 	if _, err := withNetworkOptions(ctx, &request); err != nil {
 		return nil, err
 	}
@@ -261,7 +265,7 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 			lastResponse = resp
 		}
 		// Blocked addresses are permanent; never retry.
-		if errors.Is(err, ErrBlockedAddress) {
+		if errors.Is(err, ErrBlockedAddress) || errors.Is(err, ErrTLSPinMismatch) || errors.Is(err, ErrTLSProfileConflict) || errors.Is(err, ErrTLSOptionsUnsupported) {
 			return lastResponse, err
 		}
 		lastErr = err

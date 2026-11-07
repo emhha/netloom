@@ -108,6 +108,9 @@ type phaseClock struct {
 }
 
 func newPhaseClock(ctx context.Context, req *Request) (context.Context, *phaseClock, error) {
+	if err := validateTLSRequest(req); err != nil {
+		return ctx, nil, err
+	}
 	policy := timeoutPolicy(req)
 	if err := policy.validate(); err != nil {
 		return ctx, nil, err

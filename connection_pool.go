@@ -113,6 +113,9 @@ type clientLease struct {
 func (l *clientLease) release(reuse bool) { l.once.Do(func() { l.done(reuse) }) }
 
 func (t *tlsTransport) acquireClient(ctx context.Context, req *Request) (*clientLease, error) {
+	if err := validateTLSRequest(req); err != nil {
+		return nil, err
+	}
 	if err := validateNetworkLogicalTarget(ctx, req, t.noGuard); err != nil {
 		return nil, err
 	}

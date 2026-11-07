@@ -147,6 +147,16 @@ func BuildRequest(in RequestInput) (*netloom.Request, error) {
 	}
 	request := &netloom.Request{Method: method, URL: u.String(), Header: headers, Body: body, HTTPVersion: in.HTTPVersion, FreshConnection: in.FreshConnection,
 		VerifyTLS: !in.InsecureTLS, Timeout: time.Duration(in.TimeoutSeconds) * time.Second}
+	if in.TLS != nil {
+		tls := &netloom.TLSOptions{
+			MinVersion: in.TLS.MinVersion, MaxVersion: in.TLS.MaxVersion,
+			ServerName: in.TLS.ServerName, PinnedPublicKeys: in.TLS.PinnedPublicKeys,
+		}
+		if err := tls.Validate(); err != nil {
+			return nil, err
+		}
+		request.TLSConfig = tls.Clone()
+	}
 	if in.Network != nil {
 		if err := in.Network.Validate(); err != nil {
 			return nil, err

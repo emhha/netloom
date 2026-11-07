@@ -44,6 +44,14 @@ go test -race . ./nethttp -run 'Test(Network|BuildRequestNetwork|ConnectionPoolS
 
 默认本地测试覆盖规则边界/重复/规范化、完整策略池身份、原始 Host/SNI/证书验证名（H1/H2/严格 H2、缓冲/流式/Raw）、逐跳映射及跨 origin 凭据清理。受控本机 UDP DNS 与模拟最终 literal 拨号检查生产保护开启时的地址族筛选；不向文档专用 IP 建立真实连接。明确映射用 fail-on-DNS resolver 检查不回退解析/CNAME，无候选或 tcp family 冲突不跨族回退；共享 context 预算不被每候选重置。负向用例检查受阻最终地址、规范等价的逻辑 IP 在池前拦截、任何非零策略与代理拒绝，以及跳过受阻邻居不禁止允许地址重试。真实过期 H2 握手增加映射逻辑主机且禁止 DNS 的场景，检查当前租约映射和取消仍生效；这些不证明远端 DNS、代理映射、Happy Eyeballs 或吞吐性能。
 
+## TLS 控制回归
+
+```sh
+go test -race . ./nethttp -run '^Test(TLSControls|BuildRequestTLS)' -count=5 -timeout=90s
+```
+
+真实本地服务检查 TLS1.2/1.3 精确范围、H1/H2/严格 H2 的缓冲/流式与 Raw 只发生一次实际连接；版本无交集在拨号前失败，版本上限不能向仅 1.3 服务回退。显式 DNS SNI 与逻辑 Host 分离，IP 验证保留 IP SAN 身份但不发 SNI；自定义 Profile 内嵌/缺少 SNI 的覆盖与冲突另测，pins-only 不能将验证名偷换成 Profile 内嵌值。pin 的匹配/失败、正常 PKI 名称/CA 验证、叶而非 issuer hash、多个候选、同主机顺序/并发 pin 隔离，以及失败前无 HTTP 应用请求均有断言。HTTP CONNECT 作用于 origin TLS 而非代理，Raw 代理拒绝且不拨号；Do 跨 origin 清除 TLSConfig、保留调用方对象。非零控制的 TLS/header/body stall 与 caller cause 检查实际 socket 关闭、阶段错误和单槽池恢复；Cookie 仍按逻辑 URL 而非 ServerName 隔离。结构化输入测试省略/null/空对象、版本/名称/pin 语法和双向复制；不执行外部代理、TLS1.0/1.1 或浏览器指纹等价性验收。
+
 ## 并发检查
 
 ```sh

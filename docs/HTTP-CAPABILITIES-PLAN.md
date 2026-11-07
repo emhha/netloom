@@ -8,7 +8,7 @@
 
 ## 阶段一：结果可靠性（已实现，验证见记录）
 
-本阶段已落地；实际命令与覆盖边界见 [验证记录](VALIDATION.md)。阶段二与阶段 3A 已分批交付，阶段 3B 至五仍是后续计划。普通缓冲请求已补 Timings；Raw 暂保留既有耗时/TLS 字段，缓冲 QueueMS 暂未测量，缺失阶段继续保留 nil。
+本阶段已落地；实际命令与覆盖边界见 [验证记录](VALIDATION.md)。阶段二与阶段 3A/3B 已分批交付，阶段四至五仍是后续计划。普通缓冲请求已补 Timings；Raw 暂保留既有耗时/TLS 字段，缓冲 QueueMS 暂未测量，缺失阶段继续保留 nil。
 
 1. 统一 Send、Run、SendStream 的 timeout 优先级：请求正值覆盖 Engine 配置，配置缺省 10 秒；调用方更早的 context deadline 始终生效。传输层不得用隐式 10 秒总期限覆盖已选配置。固定 TCP 拨号超时暂不扩展为公开阶段参数。
 2. Send、Run 和重定向保留失败前已收到的响应。重试失败返回最近一次非 nil 响应与最终错误，不声称该响应属于最终尝试；不在本阶段改变重试次数或方法策略。
@@ -45,7 +45,14 @@
 - 普通 H1/H2、严格 H2、流式和 Raw 共用实际拨号策略，真实过期 H2 重连使用当前租约策略。池按整个规范策略隔离；重定向逐跳重算，保留跨逻辑 origin 凭据清理。nethttp 输入校验与深拷贝，默认 nil/空/auto 保留既有行为。
 - 当前明确只支持直连：任何非零策略与代理共用均报 ErrNetworkProxyUnsupported，不声称控制代理端 DNS 或目标地址族；尚未开放公共自定义 DNS server 配置。上述边界及示例见 [API](API.md)。
 
-阶段 3B 与后续网络扩展仍待实现：TLS min/max、显式 ServerName、必要的 pinning 及与浏览器 Profile 的冲突规则；自定义 DNS、代理端映射/解析与出口策略须另行设计，不属于本次交付。
+已实现的阶段 3B：
+
+- TLSOptions 提供 MinVersion/MaxVersion、ServerName 与叶 SPKI SHA256 pin 列表，nethttp 增加结构化 tls 对象；输入有界校验及 pin 快照，不读取路径、不使用后端全局 pin 存储。VerifyTLS 仍默认 false；pin 不替代开启后的正常 CA/名称验证。
+- 版本范围仅收窄冻结默认 Profile 的广告版本，显式 Profile+版本范围或无交集明确冲突，不虚称修改范围后仍与浏览器指纹等价。ServerName 同时控制 SNI/验证名；IP 验证不发 SNI，保留 URL/Host/实际目标/origin 边界，Profile 内嵌 SNI 不得覆盖缺省逻辑身份。
+- 普通 H1/H2、严格 H2、缓冲/流式及 Raw 在实际 socket 上执行 uTLS 控制，无探测握手；有界一次性租约、阶段超时/取消、cookie 与跨 origin 清理继续有效。新控制仅支持 HTTPS 直连/HTTP CONNECT；Raw 保持无代理，其他组合明确拒绝，默认新字段零值不改变原路径。
+- 真实本地协议矩阵验证版本上下限、显式 DNS/IP 名称、pin/PKI 独立性、同名并发 pin 隔离、CONNECT、重定向与取消；错误前不发送 HTTP 请求。API 和实际执行见 [API](API.md) 与 [验证记录](VALIDATION.md)。
+
+自定义 DNS、代理端映射/解析与出口策略仍须另行设计，不属于阶段三交付。
 
 3A 验收覆盖：本地真实协议与原始 TLS 身份、错误证书名、规范策略池隔离、映射重定向及凭据清理、受控 DNS/family、逻辑/实际受阻地址、代理拒绝、无 DNS 回退及 H2 重连取消。实际执行与限制见 [验证记录](VALIDATION.md)。
 

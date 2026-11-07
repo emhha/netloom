@@ -206,6 +206,7 @@ func cloneRequest(request *Request) *Request {
 	copy.Body = append([]byte(nil), request.Body...)
 	copy.Raw = append([]byte(nil), request.Raw...)
 	copy.Network = request.Network.Clone()
+	copy.TLSConfig = request.TLSConfig.Clone()
 	return &copy
 }
 

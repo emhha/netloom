@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
@@ -29,14 +30,15 @@ func validateHTTPVersion(version string) error {
 	}
 }
 
-// doHTTPRequest uses tls-client except for strict HTTP/2, whose ALPN must be
-// checked before sending application bytes. Strict HTTP/2 owns one dedicated
-// connection until the response body is closed; it never enters the client pool.
+// doHTTPRequest uses tls-client except for strict HTTP/2 and explicit TLS
+// controls, which must be enforced on the actual connection before application
+// bytes. These paths own one dedicated uTLS connection until the body is closed;
+// the connection never enters the reusable client cache.
 func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Request) (_ *http.Response, returnErr error) {
 	if err := validateHTTPVersion(req.HTTPVersion); err != nil {
 		return nil, err
 	}
-	if req.HTTPVersion != "2-only" {
+	if req.HTTPVersion != "2-only" && !req.TLSConfig.controlsEnabled() {
 		return client.Do(hreq)
 	}
 	if hreq.URL.Scheme != "https" {
@@ -55,8 +57,12 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 	if hreq.URL.Port() == "" {
 		addr = net.JoinHostPort(hreq.URL.Hostname(), "443")
 	}
+	profile := profileOrDefault(req.Profile)
+	makeTLSConn, err := prepareTLSHandshake(req, hreq.URL.Hostname(), profile, req.HTTPVersion == "1.1")
+	if err != nil {
+		return nil, err
+	}
 	var rawConn net.Conn
-	var err error
 	enterPhase(ctx, PhaseConnect)
 	if req.Proxy == "" {
 		rawConn, err = client.GetDialer().DialContext(ctx, "tcp", addr)
@@ -79,13 +85,10 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 		}
 	}()
 
-	config := &tls.Config{ServerName: hreq.URL.Hostname(), InsecureSkipVerify: !req.VerifyTLS, OmitEmptyPsk: true}
-	if req.TLSConfig != nil {
-		config.RootCAs = req.TLSConfig.Roots
-		config.Certificates = req.TLSConfig.Certificates
+	conn, err := makeTLSConn(rawConn)
+	if err != nil {
+		return nil, err
 	}
-	profile := profileOrDefault(req.Profile)
-	conn := tls.UClient(rawConn, config, profile.GetClientHelloId(), false, false, true)
 	trace := httptrace.ContextClientTrace(ctx)
 	if trace != nil && trace.TLSHandshakeStart != nil {
 		trace.TLSHandshakeStart()
@@ -99,7 +102,33 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 		return nil, err
 	}
 	if state.NegotiatedProtocol != http2.NextProtoTLS {
-		return nil, fmt.Errorf("%w: negotiated ALPN %q", ErrHTTP2Unavailable, state.NegotiatedProtocol)
+		if req.HTTPVersion == "2-only" {
+			return nil, fmt.Errorf("%w: negotiated ALPN %q", ErrHTTP2Unavailable, state.NegotiatedProtocol)
+		}
+		if state.NegotiatedProtocol != "" && state.NegotiatedProtocol != "http/1.1" {
+			return nil, fmt.Errorf("netloom: unsupported TLS ALPN %q", state.NegotiatedProtocol)
+		}
+		var delivered atomic.Bool
+		transport := &http.Transport{
+			DisableCompression: true, ConnectionFlow: profile.GetConnectionFlow(),
+			TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
+			DialTLSContext: func(context.Context, string, string) (net.Conn, error) {
+				if !delivered.CompareAndSwap(false, true) {
+					return nil, errors.New("netloom: dedicated TLS connection cannot redial")
+				}
+				return conn, nil
+			},
+		}
+		singleClient := &http.Client{Transport: transport, Jar: client.GetCookieJar(), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		response, err := singleClient.Do(hreq)
+		if err != nil {
+			transport.CloseIdleConnections()
+			return nil, err
+		}
+		response.TLS = &state
+		response.Body = &http2DedicatedBody{ReadCloser: response.Body, conn: rawConn, stop: stop, cleanup: transport.CloseIdleConnections}
+		owned = true
+		return response, nil
 	}
 	transport := &http2.Transport{
 		DisableCompression: true,
@@ -147,10 +176,11 @@ func doHTTPRequest(client tls_client.HttpClient, req *Request, hreq *http.Reques
 // writer must not make Body.Close block while trying to send a reset stream.
 type http2DedicatedBody struct {
 	io.ReadCloser
-	conn net.Conn
-	stop func() bool
-	once sync.Once
-	err  error
+	conn    net.Conn
+	stop    func() bool
+	cleanup func()
+	once    sync.Once
+	err     error
 }
 
 func (b *http2DedicatedBody) Close() error {
@@ -158,6 +188,9 @@ func (b *http2DedicatedBody) Close() error {
 		b.stop()
 		_ = b.conn.Close()
 		b.err = b.ReadCloser.Close()
+		if b.cleanup != nil {
+			b.cleanup()
+		}
 	})
 	return b.err
 }

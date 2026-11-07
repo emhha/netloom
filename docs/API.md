@@ -41,6 +41,34 @@ Send 对非 GET/HEAD/OPTIONS 方法禁用重试；Run 使用任务调度器的�
 Send、Run、SendStream 的单次尝试总超时仍为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间。TCP 拨号缺省保留 10 秒后备上限；显式正值 PhaseTimeouts.Connect 由该次连接阶段预算接管，不再被固定 10 秒截断。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒；直接调用不创建跨尝试 Total 预算，应由调用方提供 context deadline。不修改调用方 Request；调用期间及未关闭的流存续期间，请求、Profile/TLS 对象应保持不可变。
 SendStream 不重试且不截断正文；有效总超时也覆盖返回响应头之后的正文读取。
 
+### TLS 版本、身份与公钥 pinning
+
+`Request.TLSConfig *TLSOptions` 在既有内存 Roots/Certificates 上增加以下可选控制；不引入文件读取。nil 或这些新字段全为零值时保留既有握手路径和默认浏览器 Profile。`Validate()` 校验语法与范围，`Clone()` 复制控制字段与 pin 列表；信任池、证书和私钥仍是调用方持有的不可变引用，使用期间不得修改。
+
+```go
+req := &netloom.Request{
+    URL: "https://service.example/api",
+    VerifyTLS: true,
+    TLSConfig: &netloom.TLSOptions{
+        MinVersion: netloom.TLSVersion12,
+        MaxVersion: netloom.TLSVersion13,
+        ServerName: "service.example",
+        // 用调用方可信来源获取的实际 leaf SPKI SHA256 替换此语法示例。
+        PinnedPublicKeys: []string{"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="},
+    },
+}
+```
+
+- MinVersion/MaxVersion 类型为 TLSVersion，接受 `""`、`"1.0"`、`"1.1"`、`"1.2"`、`"1.3"`，对应 TLSVersion10..13；空值继承默认 Profile 边界，min 不得大于 max。控制只收窄 Engine 冻结默认 Profile 实际广告的版本，不自动补充被 Profile 移除的旧版本；没有交集时在拨号前报 ErrTLSProfileConflict。显式 Request.Profile（即使恰好等于默认值）与非零版本范围同时配置也报该错。版本范围会改变 ClientHello，不再承诺原浏览器指纹等价；TLS1.0/1.1 字符串有效不代表当前默认 Profile 能协商它们。
+- ServerName 使用 ASCII/punycode DNS 名或无方括号、无 zone 的 IP，并规范化大小写、根点和 IP。它同时控制实际 SNI 与证书验证名，不改变 URL、HTTP Host、拨号目标、Cookie/origin 或重定向。IP 用于证书 IP SAN 验证，不作为 wire SNI 发送。未指定时验证身份仍是逻辑 URL 主机，显式 Profile 内嵌 SNI 不能在启用这些控制时偷偷替换该身份。SNI/pins 可与显式 Profile 共用；显式 DNS ServerName 配合无 SNI extension 的 Profile 报 ErrTLSProfileConflict，在 HTTP 应用数据前失败（可能已经完成 TCP/CONNECT）。
+- PinnedPublicKeys 是最多 16 个不重复的 `sha256//BASE64`，严格使用带 padding 的规范标准 base64、解码为 32 字节。匹配实际 peer **叶证书**的 DER SubjectPublicKeyInfo SHA256，多个 pin 任一命中即可；不接受文件、公钥 PEM、证书全文 hash、CA/intermediate pin 或其他算法。叶公钥不匹配可用 `errors.Is(err, ErrTLSPinMismatch)` 判断，不触发透明重试；比较与存储均局限当前连接，不使用依赖的进程级 pin 表。
+- pinning 不改变 VerifyTLS：false 时仍要求 pin 命中但不验证 CA/名称；true 时正常 CA/名称验证和 pin 都必须通过。正确 pin 不豁免过期、未知 CA 或错误名称。信任根与 mTLS 仍可同时使用。
+- 非零新控制只支持 HTTPS 直连及 `http://` CONNECT 代理；HTTP URL、HTTPS/SOCKS 等其他代理返回 ErrTLSOptionsUnsupported，不静默忽略。Raw 保持不支持任何代理；Raw 的 TLS 控制作用于 URL 对应实际握手，不重写原始请求字节。Network 非零策略仍只支持直连，不因 TLS 支持 CONNECT 而放宽。
+- 普通 H1/H2、严格 H2、缓冲/流式与 Raw 均在实际请求 socket 上实施，不增加探测连接、不替换为标准库 TLS。普通缓冲/流式启用这些控制使用有界一次性客户端租约，不参与缓存；连接直到正文关闭才释放，流始终须 Close。Raw 延续独立 socket 生命周期，不使用客户端池。阶段超时、取消和 Total 继续有效；严格 H2 不因控制配置而降级。
+- Do 跨 origin 重定向仍清除整个 TLSConfig（含 trust/mTLS/版本/ServerName/pins），避免泄漏上一 origin 的 TLS 身份；同 origin 保留独立快照。跨 origin 新请求需要新 pin 时由调用方显式逐跳配置，不能假设原 pin 会跟随。
+
+`nethttp.RequestInput.TLS` / `tls` JSON 对象接受 `min_version`、`max_version`、`server_name`、`pinned_public_keys`，不接受凭据路径或自动读取凭据。BuildRequest 校验并复制 pin 列表；缺失/null 为 nil，空对象为非 nil 空配置，仍走一次性租约。结构化转换只作字段校验，Profile/URL/代理兼容性由运行时检查；不新增 curl CLI 选项解析承诺。
+
 ### 直连网络映射与地址族
 
 `Request.Network *NetworkOptions` 是每请求策略，没有 Engine 缺省覆盖。nil、空对象和仅 `AddressFamily: "auto"` 保留原先拨号行为。`NetworkOptions.Validate()` 无 IO 地校验整组规则，`Clone()` 深拷贝规则及 IP 列表；Send/Run、SendStream 与重定向会保存独立网络策略快照，调用期间仍不得并发修改输入。

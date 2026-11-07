@@ -191,7 +191,7 @@ func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_cl
 	return client, nil
 }
 
-// doRequest pins the Engine's default profile snapshot for strict H2 too.
+// doRequest pins the Engine's default profile snapshot for all dedicated TLS paths.
 func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hreq *http.Request) (_ *http.Response, returnErr error) {
 	defer func() {
 		if clock := phaseClockFrom(hreq.Context()); clock != nil {
@@ -202,7 +202,7 @@ func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hre
 			}
 		}
 	}()
-	if req.HTTPVersion == "2-only" {
+	if req.HTTPVersion == "2-only" || req.TLSConfig.controlsEnabled() {
 		requestCopy := *req
 		id := requestCopy.Profile.GetClientHelloId()
 		if id.IsSet() {
@@ -356,8 +356,9 @@ func (t *tlsTransport) roundTripNoGuard(ctx context.Context, req *Request) (*Res
 // probing keeps the browser JA3/JA4; for http it dials directly. Both paths run
 // through the dial guard so loopback/link-local remain blocked.
 type rawTransport struct {
-	maxBody  int
-	resolver *net.Resolver
+	maxBody        int
+	resolver       *net.Resolver
+	defaultProfile profiles.ClientProfile
 
 	// noGuard disables the dial guard for tests only (see tlsTransport.noGuard).
 	noGuard bool
@@ -367,7 +368,7 @@ func newRawTransport(maxBody int) *rawTransport {
 	if maxBody <= 0 {
 		maxBody = defaultMaxBodySize
 	}
-	return &rawTransport{maxBody: maxBody, resolver: net.DefaultResolver}
+	return &rawTransport{maxBody: maxBody, resolver: net.DefaultResolver, defaultProfile: cloneClientProfile(profiles.DefaultClientProfile)}
 }
 
 func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response, returnErr error) {
@@ -432,7 +433,32 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response
 	var conn net.Conn
 	var tlsInfo *TLSInfo
 
-	if useTLS {
+	if useTLS && req.TLSConfig.controlsEnabled() {
+		profile := req.Profile
+		if id := profile.GetClientHelloId(); id.IsSet() {
+			profile = profileOrDefault(t.defaultProfile)
+		}
+		makeTLSConn, err := prepareTLSHandshake(req, host, profile, true)
+		if err != nil {
+			return nil, err
+		}
+		plain, err := guard(ctx, "tcp", addr)
+		if err != nil {
+			return nil, err
+		}
+		uc, err := makeTLSConn(plain)
+		if err != nil {
+			_ = plain.Close()
+			return nil, err
+		}
+		enterPhase(ctx, PhaseTLS)
+		if err := uc.HandshakeContext(ctx); err != nil {
+			_ = uc.Close()
+			return nil, err
+		}
+		conn = uc
+		tlsInfo = buildTLSInfo(uc.ConnectionState())
+	} else if useTLS {
 		// Borrow the tls-client fingerprinted TLS dialer, but layer it on top of
 		// the guarded raw dialer so the SSRF guard still runs before connect.
 		opts := []tls_client.HttpClientOption{
