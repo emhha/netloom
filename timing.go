@@ -88,5 +88,20 @@ func observe(ctx context.Context, start time.Time) (context.Context, *observatio
 func (o *observation) snapshot() (Timings, *TLSInfo) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.timings, o.tls
+	return cloneTimings(o.timings), o.tls
+}
+
+func cloneTimings(in Timings) Timings {
+	clone := func(p *float64) *float64 {
+		if p == nil {
+			return nil
+		}
+		v := *p
+		return &v
+	}
+	in.DNSMS = clone(in.DNSMS)
+	in.ConnectMS = clone(in.ConnectMS)
+	in.TLSMS = clone(in.TLSMS)
+	in.FirstByteMS = clone(in.FirstByteMS)
+	return in
 }

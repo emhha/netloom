@@ -190,7 +190,11 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 		s.recordHostError(host)
 		// Surface the failed Context to consumers with the error attached.
 		c := NewContext(ctx, t.Req, t.Pipeline, nil)
-		c.Resp = &Response{Error: err, Scheme: schemeOf(t.Req.URL)}
+		if resp == nil {
+			resp = &Response{Scheme: schemeOf(t.Req.URL)}
+		}
+		resp.Error = err
+		c.Resp = resp
 		s.deliver(&Result{Ctx: c})
 		return
 	}
@@ -208,8 +212,17 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 }
 
 func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response, error) {
+	request := *req
+	if request.Timeout <= 0 {
+		request.Timeout = s.cfg.Timeout
+		if request.Timeout <= 0 {
+			request.Timeout = dialTimeout
+		}
+	}
+	req = &request
 	tr := route(req, s.tlsT, s.rawT)
 	var lastErr error
+	var lastResponse *Response
 	for attempt := 0; attempt <= s.cfg.Retries; attempt++ {
 		rctx := ctx
 		var cancel context.CancelFunc
@@ -227,16 +240,20 @@ func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response,
 		if err == nil {
 			return resp, nil
 		}
+		// A later attempt may fail before headers; retain the last captured evidence.
+		if resp != nil {
+			lastResponse = resp
+		}
 		// Blocked addresses are permanent; never retry.
 		if errors.Is(err, ErrBlockedAddress) {
-			return nil, err
+			return lastResponse, err
 		}
 		lastErr = err
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return lastResponse, ctx.Err()
 		}
 	}
-	return nil, lastErr
+	return lastResponse, lastErr
 }
 
 func (s *scheduler) deliver(r *Result) {

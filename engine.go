@@ -166,7 +166,7 @@ func (e *Engine) Send(ctx context.Context, req *Request) (*Response, error) {
 	tmp := newScheduler(cfg, e.tlsT, e.rawT, e.logger)
 	resp, err := tmp.sendWithRetry(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("netloom.Engine.Send: %w", err)
+		return resp, fmt.Errorf("netloom.Engine.Send: %w", err)
 	}
 	return resp, nil
 }

@@ -36,8 +36,26 @@ RequestInput 的 FollowRedirects/MaxRedirects、Stream、MaxResponseBytes 是调
 
 根包 Request.VerifyTLS 默认 false；调用方应显式选择。自定义根和客户端证书不改变该开关。
 Send 对非 GET/HEAD/OPTIONS 方法禁用重试；Run 使用任务调度器的重试策略，调用方应对具有副作用的任务设置 Retries=-1。
-耗时与 TLS 字段是可选观测，不能把缺失字段当作零耗时。流式路径使用原生 trace，不另行握手；缓冲路径在部分 HTTP/1.1 TLS 元数据缺失时会尝试第二次握手。
-SendStream 不重试且不截断正文；其请求级 Timeout 默认由底层传输补 10 秒，Config.Timeout 不覆盖流式路径。
+Send、Run、SendStream 的有效总超时均为：正值 Request.Timeout 优先，否则使用 Config.Timeout（配置缺省 10 秒）；更早的调用方 context deadline 始终有效。超时覆盖单次尝试的建连至正文读取，不包含 Engine 等待并发槽/限流的时间；调用方需要包括排队、重试及重定向的总预算时应设置 context deadline。TCP 拨号超时仍固定 10 秒，不等于总超时上限。直接 Transport.RoundTrip 没有 Engine 配置，Request.Timeout 缺省为 10 秒。不修改调用方 Request。
+SendStream 不重试且不截断正文；有效总超时也覆盖返回响应头之后的正文读取。
+
+### 失败与部分响应
+
+Send/Transport.RoundTrip 可同时返回非 nil Response 和非 nil error。状态码、headers 和已读正文仍是有效的部分证据，不能因 error 丢弃，也不能将它视为完整成功。BodyTruncated 仅表示大小上限导致的主动截断；读取失败由 error/Response.Error 表示。
+重试失败保留最近一次非 nil 响应，返回的 error 是最终失败原因，两者可能来自不同尝试；本阶段不提供逐次尝试历史。Run 失败时同样保留证据，并将最终错误写入 Response.Error，不执行成功分析 Pipeline。重定向 Do 也会保留发送方返回的部分响应。
+
+### 实际连接诊断
+
+普通缓冲与流式路径使用实际请求的 trace/TLS 状态，不为补充元数据另行握手。TLS 和 DNS/Connect/TLS/FirstByte 阶段测量可能缺失（nil），尤其是自定义 TLS 或代理路径；不能将缺失解释成零耗时，也不伪造代理出口 IP。Raw 路径保留自身的 ResponseTime/TLS 信息，尚未提供同等 Timings。
+缓冲 Response.Timings 的 HeadersMS 从传输开始计至收到响应头，BodyMS 为有界采集耗时，TotalMS 为这两者之和，不包含重试/跳转或后续 CNAME 补充查询。缓冲路径 QueueMS 暂不测量，保留零值。流式 Response 是响应头时的固定元数据，其 BodyMS/TotalMS 尚未完成；完成后的测量使用 StreamResponse.Status()，不要等待 Response 被后台更新。
+
+StreamResponse.Status() 返回线程安全、可独立修改的 StreamStatus 快照：
+
+- BytesRead 是调用方经 Body.Read 收到的正文 bytes，不是网络线上传输量；不自动记录正文。
+- Complete 仅在读到 EOF 时为 true。即使读了声明的 Content-Length，未观察到 EOF 也不声称完成。
+- Finished 在 EOF、读取错误或关闭时置位；BodyMS/TotalMS 此时冻结，之前为零。流式 QueueMS 单独记录并发槽/限流等待，不计入 TotalMS。
+- Closed 表示 Body 已关闭；Error 记录读取失败、上下文取消，或提前 Close 的 ErrStreamClosedEarly。读取到 EOF 后正常 Close 不改写完成状态；Close 本身仍返回底层关闭错误。
+- Status 可与单个读取者及 Close 并发调用，不允许多个 goroutine 同时读取 Body。EOF 不释放并发槽，仍须显式 Close。
 Raw 不使用 CookieJar；Raw+Proxy 目前明确报错，防止悄悄绕过代理直连。普通和流式路径支持 tls-client 的代理配置。
 
 ## 所有权、背压与关闭

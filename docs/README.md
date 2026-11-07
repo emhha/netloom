@@ -13,6 +13,7 @@
 - [架构](architecture.md)：目录职责、依赖方向和扩展原则。
 - [开发指南](development.md)：工具链、命令和修改流程。
 - [测试说明](testing.md)：默认测试、race、集成环境和证据要求。
+- [HTTP/HTTPS 能力计划](HTTP-CAPABILITIES-PLAN.md)：对标 libcurl 的分阶段传输能力与验收边界。
 - [贡献指南](../CONTRIBUTING.md)：变更范围与提交检查。
 - [安全使用](../SAFETY.md)：TLS、代理、凭据、MITM 和目标授权边界。
 - [验证记录](VALIDATION.md)：实际运行结果与未验证范围。

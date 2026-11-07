@@ -12,6 +12,14 @@ go build ./...
 
 `fingerprint` 使用仓库随附规则做离线加载、等价性和匹配测试；不主动扫描外网。字典测试使用固定快照，不应联网更新。
 
+## HTTP 可靠性回归
+
+```sh
+go test . -run '^Test(Reliability|PartialResponse)' -count=1
+```
+
+这些默认测试使用 fake transport 或本地可控 HTTP/TLS 服务，覆盖请求/配置/context 超时（含正文阻塞与亚毫秒期限）、失败时的部分响应、重试后证据保留、实际 TLS 连接次数与证书、流式 EOF/提前关闭/读取失败状态，以及 Engine.Close 中断读取。它们不访问外网，不替代真实代理/外部目标验收。流式状态并发读取和关闭路径同时由 race 检查。
+
 ## 并发检查
 
 ```sh

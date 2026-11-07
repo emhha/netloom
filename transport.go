@@ -103,11 +103,6 @@ func (t *tlsTransport) guardDialer() func(ctx context.Context, network, addr str
 // honoured without shared mutable state. connectedIP is updated by the guarded
 // dialer on connect so the final hop's IP can be reported.
 func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string, error) {
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = dialTimeout
-	}
-
 	var connectedIP string
 	guard := t.guardDialer()
 	dialCapture := func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -128,8 +123,23 @@ func (t *tlsTransport) buildClient(req *Request) (tls_client.HttpClient, *string
 		transportOptions.RootCAs = req.TLSConfig.Roots
 		transportOptions.Certificates = req.TLSConfig.Certificates
 	}
+	// The context owns the precise request deadline. For direct requests we
+	// disable the client's independent timer. tls-client's CONNECT dialer,
+	// however, treats a zero timeout as an already-expired socket deadline,
+	// so proxy clients need a positive (rounded-up) fallback as well.
+	var clientTimeoutMS int
+	if req.Proxy != "" {
+		timeout := req.Timeout
+		if timeout <= 0 {
+			timeout = dialTimeout
+		}
+		clientTimeoutMS = int(timeout / time.Millisecond)
+		if timeout%time.Millisecond != 0 {
+			clientTimeoutMS++
+		}
+	}
 	opts := []tls_client.HttpClientOption{
-		tls_client.WithTimeoutMilliseconds(int(timeout.Milliseconds())),
+		tls_client.WithTimeoutMilliseconds(clientTimeoutMS),
 		tls_client.WithClientProfile(profileOrDefault(req.Profile)),
 		// Redirects are surfaced to the caller (Location header) rather than
 		// followed transparently, so the dial guard re-validates each hop and
@@ -178,6 +188,7 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	start := time.Now()
+	ctx, observation := observe(ctx, start)
 	client, connectedIP, err := t.buildClient(req)
 	if err != nil {
 		return nil, err
@@ -224,22 +235,24 @@ func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, 
 	}
 	delete(resp.RequestHeaders, http.HeaderOrderKey)
 
+	headersAt := time.Now()
 	resp.Body, resp.BodyTruncated, err = readCappedResult(hresp.Body, t.maxBody)
-	resp.ResponseTime = time.Since(start)
-	if err != nil {
-		resp.Error = err
-		return resp, fmt.Errorf("netloom: read response body: %w", err)
-	}
-
+	finishedAt := time.Now()
+	resp.ResponseTime = finishedAt.Sub(start)
+	timing, actualTLS := observation.snapshot()
+	timing.HeadersMS = milliseconds(headersAt.Sub(start))
+	timing.BodyMS = milliseconds(finishedAt.Sub(headersAt))
+	timing.TotalMS = milliseconds(finishedAt.Sub(start))
+	resp.Timings, resp.TLS = &timing, actualTLS
 	if hresp.TLS != nil {
 		resp.TLS = buildTLSInfo(*hresp.TLS)
-	} else if strings.EqualFold(hreq.URL.Scheme, "https") {
-		// tls-client surfaces the ConnectionState on the HTTP/2 path but not on
-		// HTTP/1.1 (fhttp only fills resp.TLS when the custom-dialed conn is a
-		// *tls.Conn, whereas tls-client returns a *utls.UConn). For http/1.1
-		// targets, capture the certificate with a best-effort fingerprinted TLS
-		// peek so probe's cert extraction keeps working.
-		resp.TLS = t.peekTLSInfo(ctx, req, hreq.URL.Hostname(), hreq.URL.Port())
+	}
+	if err != nil {
+		if cause := requestContextError(ctx); cause != nil {
+			err = cause
+		}
+		resp.Error = err
+		return resp, fmt.Errorf("netloom: read response body: %w", err)
 	}
 	if cname := lookupCNAME(ctx, t.resolver, hreq.URL.Hostname()); cname != "" {
 		resp.CNAME = cname
@@ -280,43 +293,6 @@ func (t *tlsTransport) jarFor(req *Request) tls_client.CookieJar {
 		t.cookies.jars[key] = jar
 	}
 	return jar
-}
-
-// peekTLSInfo opens a best-effort fingerprinted TLS connection and reads its
-// certificate. It is only used when the main request did not surface a
-// ConnectionState (HTTP/1.1). Any error yields nil — the caller treats TLS
-// metadata as optional.
-func (t *tlsTransport) peekTLSInfo(ctx context.Context, req *Request, host, port string) *TLSInfo {
-	if port == "" {
-		port = "443"
-	}
-	opts := []tls_client.HttpClientOption{
-		tls_client.WithClientProfile(profileOrDefault(req.Profile)),
-		tls_client.WithServerNameOverwrite(host),
-	}
-	if !req.VerifyTLS {
-		opts = append(opts, tls_client.WithInsecureSkipVerify())
-	}
-	if req.Proxy != "" {
-		opts = append(opts, tls_client.WithProxyUrl(req.Proxy))
-	} else {
-		opts = append(opts, tls_client.WithDialContext(t.guardDialer()))
-	}
-	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
-	if err != nil {
-		return nil
-	}
-	defer client.CloseIdleConnections()
-
-	conn, err := client.GetTLSDialer()(ctx, "tcp", net.JoinHostPort(host, port))
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = conn.Close() }()
-	if uc, ok := conn.(*tls.UConn); ok {
-		return buildTLSInfo(uc.ConnectionState())
-	}
-	return nil
 }
 
 // roundTripNoGuard is a test helper that bypasses the dial guard so loopback
@@ -499,6 +475,19 @@ func applyHeaderOrder(hreq *http.Request, order []string) {
 		hreq.Header = http.Header{}
 	}
 	hreq.Header[http.HeaderOrderKey] = append([]string(nil), order...)
+}
+
+// requestContextError also handles a dependency's timer firing after the
+// effective deadline but before the context timer goroutine has been scheduled.
+// It is only used to classify an existing read/close failure, not successful IO.
+func requestContextError(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 func readCappedResult(r io.Reader, max int) ([]byte, bool, error) {
