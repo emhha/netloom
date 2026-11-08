@@ -15,6 +15,8 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 ### 默认值与可见行为
 
+- `NetworkOptions` 新增 `LocalAddress`（JSON `local_address`）与 `Interface`（`interface`），分别绑定实际 TCP 源 IP 和 Linux 网卡；空值不改变原行为，适用于普通/流式/Raw 直连，与任意代理组合仍明确拒绝。源地址约束目标族，完整规范策略进入池身份；绑定不影响逻辑 URL/Host/SNI，不绑定 DNS resolver、不修改系统配置。新增可用 errors.Is 判断的 `ErrNetworkBindingInvalid`、`ErrNetworkBindingUnsupported`、`ErrNetworkBinding`：前两类在验证阶段返回，后者保留内核原因且不自动重试/降级。Interface 在非 Linux 即验证失败；Linux 可能需要调用方授予 capability。已有连接不因设备变化自动重绑，重新建连须 FreshConnection 或新 Engine；详情见 [绑定指南](NETWORK-BINDING.md)。
+
 - 阶段四新增 Request.Upload/NewUpload/NewReplayableUpload/NewMultipartUpload、CaptureRequestBody/UploadEvidence、Config.Session/NewSession、Config/Request.RetryPolicy 和 Request.Auth/ChallengeAuthenticator。详细生命周期分别见 [上传](REQUEST-BODIES.md)、[会话](SESSIONS.md)、[重试](RETRIES.md)、[认证](AUTHENTICATION.md)；不引入文件路径、隐式持久化或新的 CLI 选项全集。
 - Send 与 Run 统一默认只重试 GET/HEAD/OPTIONS 网络错误，修复过去 Run 会重试有副作用方法的不一致；Raw 不再透明重试。显式 RetryPolicy 可放开方法/状态，不能放开不可重放正文。nil 继承，非 nil 零策略禁用，优先于 legacy Retries。
 - legacy CookieJar=true 改用有界且遵守 Secure/Path/Domain/Expiry 的存储，默认256host/64cookie/30分钟 host idle；过去忽略 cookie path/secure 的行为不再兼容。显式 Config.Session 可跨 engine 共享，Clear 不撤回已发头且进行中的 Set-Cookie 可能再次填入。清理/淘汰后的缓存连接不持有旧 jar。

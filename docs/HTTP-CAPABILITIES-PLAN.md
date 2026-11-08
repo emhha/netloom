@@ -68,7 +68,9 @@
 
 ## 阶段五：按需求扩展
 
-WebSocket 独立模块、HTTP/3、h2c、HTTP/1.0、字节限速/low-speed、Unix socket、网卡/本地端口、企业认证和高级代理。自动续传、Cookie/ETag 文件及下载命名不是核心优先项。
+已按需求交付本地源 IP 与 Linux 网卡绑定：每请求 LocalAddress/Interface，约束实际直连 TCP socket 与目标地址族；无效配置、非 Linux 设备绑定和内核绑定失败明确报错，不提权、不改路由、不回退未绑定连接。完整规范源 IP/设备参与池隔离，DNS resolver 与代理出口不在范围；已有 socket 不随设备变化重绑。Go/JSON 适配与实际 H1/H2/严格 H2、Raw、源 IP/设备、池复用/并发/取消回归见 [绑定指南](NETWORK-BINDING.md) 和 [验证记录](VALIDATION.md)。
+
+其余仍待按需求设计：WebSocket 独立模块、HTTP/3、h2c、HTTP/1.0、字节限速/low-speed、Unix socket、本地端口选择、企业认证和高级代理。自动续传、Cookie/ETag 文件及下载命名不是核心优先项。
 
 ## 维护方式
 

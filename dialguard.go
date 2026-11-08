@@ -62,7 +62,7 @@ func guardedDialContext(base *net.Dialer, resolver *net.Resolver) func(ctx conte
 				return nil, fmt.Errorf("netloom.dial %s: %w", addr, ErrBlockedAddress)
 			}
 			start := time.Now()
-			conn, err := phaseDialer(ctx, base).DialContext(ctx, network, addr)
+			conn, err := dialWithNetworkBinding(ctx, base, network, addr)
 			recordMeasured(ctx, "connect", start)
 			return conn, err
 		}
@@ -88,9 +88,12 @@ func guardedDialContext(base *net.Dialer, resolver *net.Resolver) func(ctx conte
 				continue
 			}
 			start := time.Now()
-			conn, derr := phaseDialer(ctx, base).DialContext(ctx, network, net.JoinHostPort(ipa.IP.String(), port))
+			conn, derr := dialWithNetworkBinding(ctx, base, network, net.JoinHostPort(ipa.IP.String(), port))
 			recordMeasured(ctx, "connect", start)
 			if derr != nil {
+				if errors.Is(derr, ErrNetworkBinding) {
+					return nil, derr
+				}
 				if firstErr == nil {
 					firstErr = derr
 				}

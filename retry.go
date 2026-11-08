@@ -148,7 +148,7 @@ func permanentRetryError(err error) bool {
 	var invalid x509.CertificateInvalidError
 	var hostname x509.HostnameError
 	var authority x509.UnknownAuthorityError
-	return errors.As(err, &invalid) || errors.As(err, &hostname) || errors.As(err, &authority)
+	return errors.Is(err, ErrNetworkBinding) || errors.Is(err, ErrNetworkBindingInvalid) || errors.Is(err, ErrNetworkBindingUnsupported) || errors.As(err, &invalid) || errors.As(err, &hostname) || errors.As(err, &authority)
 }
 
 func waitRetry(ctx context.Context, d time.Duration) error {

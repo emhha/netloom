@@ -192,4 +192,38 @@ git diff --check
 
 中间回归发现 fhttp 即使配置不跟随跳转，仍在307/308的拒绝回调之前提前调用GetBody，多开一次源；现发送给后端的wire副本不暴露GetBody，显式认证/调度/Do保留原始重放能力，相应用例重跑通过。认证网络错误同时遇到context结束时也保留原有PhaseError与取消cause，而非丢失阶段。
 
-范围限制：不执行外部Cookie服务、远端代理/付费API、真实登录或性能验收；不证明跨浏览器SameSite导航语义、Digest rspauth/auth-int/nonce缓存、企业认证或OAuth生命周期。自定义reader/opener/认证扩展必须遵守context与Close契约，SDK不能强制终止不合作的调用方代码；捕获的请求正文可能包含敏感数据，默认不启用。阶段五仍未实施。
+范围限制：不执行外部Cookie服务、远端代理/付费API、真实登录或性能验收；不证明跨浏览器SameSite导航语义、Digest rspauth/auth-int/nonce缓存、企业认证或OAuth生命周期。自定义reader/opener/认证扩展必须遵守context与Close契约，SDK不能强制终止不合作的调用方代码；捕获的请求正文可能包含敏感数据，默认不启用。此时阶段五尚未实施。
+
+## 2026-11-07：本地源 IP 与 Linux 网卡绑定
+
+工具链为 Go 1.26.3 linux/amd64、Python 3.14.8。最终实现执行并通过：
+
+```sh
+go test -race . ./nethttp -run '^(TestNetworkBinding|TestBuildRequestNetwork)' -count=3 -timeout=90s
+make check
+make race
+make integration-compile
+make integration-local
+git diff --check
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ./...
+```
+
+- 定向 race 连续三轮通过，根包4.457s、nethttp 1.063s；IPv6 协议矩阵另以 verbose race 连续三轮通过，无 IPv6 环境跳过。
+- `make check`：格式、仓库/文档检查、17个 Python 离线测试、50个固定字典文件校验、全包单测/vet/build 通过；根包17.105s。
+- `make race`：全包通过，根包23.261s，无已报告数据竞争。
+- `make integration-compile`：集成用例编译通过；`make integration-local`：本地集成真实执行通过，根包17.239s，明确排除外部 Python Cookie 服务。
+- Windows/Darwin amd64 生产包交叉构建通过；不代表这些平台已运行测试或实测源地址绑定。
+
+实际 socket 证据与边界：
+
+- IPv4 的 `.1` / `.2` 与 IPv6 `::1` 服务端 RemoteAddr 验证，覆盖 H1/H2/严格 H2 × buffer/stream 及 Raw；映射的逻辑 Host/SNI、实际目标和零 DNS 查询保持原语义。
+- Linux 独立 SO_BINDTODEVICE 权限探针成功，实际请求 TCP fd 的 getsockopt 读回 `lo`；设备 TLS 矩阵、设备/未绑定设备策略分池与同策略复用均真实执行，当前进程没有权限跳过。
+- 不同源分池、mapped 等价源复用、16路混合并发、重定向复制与调用方不可变性；取消/响应头阶段超时后实际 socket 关闭、单槽池恢复。
+- stale H2 的 bound-tls-phase buffer/stream 模式 race 三轮通过，监听端同时检查 warm 与实际重连 socket 的 `.2` 源；完整 stale H2 回归也 race 三轮通过，保留当前租约 TLS 预算、零 DNS 和关闭断言。
+- 地址/设备语法、源地址族冲突、候选筛族与永久失败立即停止；非本机源与不存在设备都不能到达 HTTP handler，不回退未绑定连接。不可用源保留与独立 bind 探针一致的内核 errno 和 net.OpError，Observer 只报告一次且 WillRetry=false；失败后槽位仍可使用。
+- 无效绑定及代理组合在打开上传源前拒绝；结构化 JSON 的零值/null/类型、平台拒绝与深拷贝一致，不把解析成功当作 socket 能力证据。
+
+中间 IPv6 Raw 回归因测试 fixture 未设置 Raw 私有 noGuard 而正确被生产地址保护拒绝；补齐仅受控本机测试的配置后通过，生产拨号保护未放宽。独立只读复核未发现运行路径、池身份或文档边界不一致。
+
+范围限制：仅绑定直连目标 TCP，不绑定 DNS resolver，不支持代理组合或源端口选择；不提权、不配置系统接口/路由、不监控或动态迁移已有 socket。当前环境允许 SO_BINDTODEVICE，未在另一个无权限进程中实测 EPERM/EACCES；接口重命名/删除/同名重建及 NAT 的持续行为仍由内核决定，不作跨环境保证。未执行远端目标/代理、外部 Cookie 服务或性能验收；测试中的环境跳过必须单列，不能视为验证通过。完整契约见 [绑定指南](NETWORK-BINDING.md)。

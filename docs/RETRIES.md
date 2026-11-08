@@ -19,7 +19,7 @@ policy := &netloom.RetryPolicy{
 
 - Methods=nil 只允许 GET/HEAD/OPTIONS；显式空数组不允许任何方法。显式加入 PUT/DELETE/POST 等表示调用方确认副作用和幂等性；SDK 不生成幂等键，也不承诺服务端没有收到失败尝试。
 - bytes 正文可重放；Upload 只有通过 replayable opener 明确声明才可重放。不满足条件时只发送一次，不先消耗 one-shot reader 再失败重试。Raw 完全不参与重试，避免重复执行多请求字节串。
-- MaxRetries 有界0..100，methods/status 列表有界且校验；状态只接受400..599。网络错误与选中状态可触发重试；受阻地址、pin、TLS配置冲突、证书验证错误、认证协议/配置和正文不可重放/短读错误不重试。调用方取消与 Total 立即终止。
+- MaxRetries 有界0..100，methods/status 列表有界且校验；状态只接受400..599。网络错误与选中状态可触发重试；受阻地址、pin、TLS配置冲突、证书验证错误、认证协议/配置、无效/不支持/运行期失败的本地绑定（`ErrNetworkBindingInvalid` / `ErrNetworkBindingUnsupported` / `ErrNetworkBinding`）和正文不可重放/短读错误不重试。调用方取消与 Total 立即终止。
 - BaseDelay 确定性指数增长，不含 jitter；MaxDelay 为0时上限30秒，最大允许1分钟，BaseDelay 不能超过显式上限。BaseDelay 为0无固定等待。Retry-After 支持非负秒数和 HTTP-date，作为最低建议但**仍裁剪到 MaxDelay**；无效或过去日期不增加等待。
 - 每次重试前等待可被 context、Engine.Close 和外层 Total 中断。单次 Request.Timeout 不覆盖两次尝试之间的退避；PhaseTimeouts.Total 覆盖全部尝试/退避，Do 的外层 Total 也覆盖跳转及其内部重试。
 - 选中状态在重试前已按 MaxBodySize 读取/关闭并释放租约；不自动交付中间响应流。后续尝试在 headers 前失败时仍保留最近一次非 nil Response，故 Response 和最终 error 可能来自不同尝试。最终选中状态没有传输错误时仍返回正常 Response，不把429/503变成网络错误。

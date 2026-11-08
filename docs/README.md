@@ -10,6 +10,7 @@
 - [内存会话](SESSIONS.md)：注入、host 隔离、容量/过期和清理。
 - [重试与观察](RETRIES.md)：方法安全、退避、Retry-After 和 attempt 回调。
 - [认证](AUTHENTICATION.md)：Basic/Digest、挑战扩展及凭据边界。
+- [本地源 IP 与 Linux 网卡绑定](NETWORK-BINDING.md)：按请求绑定、地址族、权限、错误与池生命周期。
 - [升级说明](UPGRADING.md)：公开导入路径与可见行为变化。
 
 ## 架构与开发

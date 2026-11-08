@@ -83,7 +83,7 @@ func (t *tlsTransport) guardDialer() func(ctx context.Context, network, addr str
 	base := &net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}
 	if t.noGuard {
 		return func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return phaseDialer(ctx, base).DialContext(ctx, network, addr)
+			return dialWithNetworkBinding(ctx, base, network, addr)
 		}
 	}
 	return guardedDialContext(base, t.resolver)
@@ -409,7 +409,7 @@ func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response
 	var guard func(ctx context.Context, network, addr string) (net.Conn, error)
 	if t.noGuard {
 		guard = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return phaseDialer(ctx, base).DialContext(ctx, network, addr)
+			return dialWithNetworkBinding(ctx, base, network, addr)
 		}
 	} else {
 		guard = guardedDialContext(base, t.resolver)

@@ -124,14 +124,22 @@ func (c *stalledTLSConn) Read([]byte) (int, error) {
 
 func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 	for _, stream := range []bool{false, true} {
-		for _, mode := range []string{"request-timeout", "tls-phase", "mapped-tls-phase", "caller-cancel", "engine-close"} {
+		for _, mode := range []string{"request-timeout", "tls-phase", "mapped-tls-phase", "bound-tls-phase", "caller-cancel", "engine-close"} {
 			name := mode
 			if stream {
 				name += "/stream"
 			}
 			t.Run(name, func(t *testing.T) {
+				if mode == "bound-tls-phase" {
+					networkBindingLoopbackAlias(t)
+				}
 				server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "h2") }))
 				listener := &stalledTLSListener{Listener: server.Listener, accepted: make(chan struct{}, 1), closed: make(chan struct{}, 1)}
+				var boundSources chan string
+				if mode == "bound-tls-phase" {
+					boundSources = make(chan string, 4)
+					listener.Listener = &networkBindingObservedListener{Listener: server.Listener, sources: boundSources}
+				}
 				server.Listener = listener
 				server.EnableHTTP2 = true
 				server.StartTLS()
@@ -139,7 +147,8 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				e := pooledEngine(t, 1)
 				target := server.URL
 				var mapping *NetworkOptions
-				if mode == "mapped-tls-phase" {
+				var dns atomic.Int32
+				if mode == "mapped-tls-phase" || mode == "bound-tls-phase" {
 					host, port, err := net.SplitHostPort(server.Listener.Addr().String())
 					if err != nil {
 						t.Fatal(err)
@@ -150,8 +159,10 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 					}
 					target = "https://mapped.test"
 					mapping = &NetworkOptions{ConnectTo: []ConnectToRule{{Host: "mapped.test", Port: 443, ConnectHost: host, ConnectPort: portNumber}}}
-					var dns atomic.Int32
 					e.tlsT.(*tlsTransport).resolver = noNetworkDNS(&dns)
+					if mode == "bound-tls-phase" {
+						mapping.LocalAddress = "127.0.0.2"
+					}
 				}
 				warm, err := e.Send(context.Background(), &Request{URL: target, Network: mapping, HTTPVersion: "2", Timeout: 2 * time.Second})
 				if err != nil {
@@ -160,11 +171,14 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				if warm.HTTPVersion != "HTTP/2.0" {
 					t.Fatalf("warm protocol=%s", warm.HTTPVersion)
 				}
+				if boundSources != nil {
+					networkBindingAssertAcceptedSource(t, boundSources)
+				}
 				server.CloseClientConnections()
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				req := &Request{URL: target, Network: mapping, HTTPVersion: "2", Timeout: 3 * time.Second}
-				if mode == "tls-phase" || mode == "mapped-tls-phase" {
+				if mode == "tls-phase" || mode == "mapped-tls-phase" || mode == "bound-tls-phase" {
 					req.PhaseTimeouts = &PhaseTimeouts{TLSHandshake: 80 * time.Millisecond}
 				}
 				if mode == "request-timeout" {
@@ -196,6 +210,9 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				case <-time.After(time.Second):
 					t.Fatal("H2 reconnect did not dial")
 				}
+				if boundSources != nil {
+					networkBindingAssertAcceptedSource(t, boundSources)
+				}
 				if mode == "caller-cancel" {
 					cancel()
 				}
@@ -210,7 +227,7 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				}
 				select {
 				case err := <-done:
-					if mode == "tls-phase" || mode == "mapped-tls-phase" {
+					if mode == "tls-phase" || mode == "mapped-tls-phase" || mode == "bound-tls-phase" {
 						assertPhaseDeadline(t, err, PhaseTLS)
 					}
 					if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrEngineClosed) {
@@ -223,6 +240,9 @@ func TestConnectionPoolStaleHTTP2ReconnectCancellation(t *testing.T) {
 				case <-listener.closed:
 				case <-time.After(500 * time.Millisecond):
 					t.Fatal("stalled H2 reconnect socket leaked")
+				}
+				if dns.Load() != 0 {
+					t.Fatalf("mapped H2 warm/reconnect unexpectedly performed DNS: %d", dns.Load())
 				}
 			})
 		}

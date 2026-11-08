@@ -77,6 +77,17 @@ go test -tags=integration ./...
 
 没有准备服务时 Cookie 用例会跳过，不能把 `go test` 的成功退出当作这些场景的执行证据。不要为了让 probe 用例通过而关闭生产拨号防护或自动修改 `/etc/hosts`。调用方应按测试中描述的协议准备受控服务，再运行对应测试。CI 执行集成编译与 `integration-local`：后者明确排除名为 `TestPythonCookieServerE2E` 的两个外部服务用例，不假称执行过外部 Cookie 服务。本地 TLS/代理/流关闭集成仍会真实运行。
 
+## 本地源 IP 与 Linux 网卡绑定
+
+```sh
+go test -race . ./nethttp -run '^(TestNetworkBinding|TestBuildRequestNetwork)' -count=3 -v -timeout=90s
+go test -race . -run '^TestConnectionPoolStaleHTTP2ReconnectCancellation$' -count=3 -timeout=45s
+```
+
+这些测试只创建受控本地 socket，不改接口/路由、不提权、不依赖外部服务器。服务端 RemoteAddr 验证真实 IPv4/IPv6 源，覆盖 H1/H2/严格 H2、buffer/stream 和 Raw；Linux 用独立内核探针验证 SO_BINDTODEVICE 权限，并从实际请求 socket 读回设备名，检查池隔离、映射、取消与 stale H2 重连。不可用源/设备不得回退，永久绑定错误不能被重试策略重发，预检不打开上传源。
+
+基础 `127.0.0.1` 和 `::1` 源测试不依赖 Linux；`.2` loopback alias 的矩阵在非 Linux 明确跳过。IPv6 本地地址族不可用、Linux 设备绑定探针返回 EPERM/EACCES，或系统允许任意未配置源地址时，相应测试会明确说明缺失覆盖，不能将跳过视为能力验收。非 Linux 的 Interface 拒绝由平台分支验证，跨平台 build 只证明编译、不证明该平台运行行为；权限说明见 [绑定指南](NETWORK-BINDING.md)。
+
 ## 仓库与资源检查
 
 ```sh

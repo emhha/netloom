@@ -49,6 +49,8 @@ HTTP/HTTPS 请求可用 `HTTPVersion: "2"` 表示偏好 H2、允许 H1 降级，
 
 可通过 `Config.PhaseTimeouts` 配置连接（含 DNS/HTTP CONNECT）、TLS/连接初始化、完整响应头、阻塞正文读取 idle 和跨重试/重定向总体预算；`Request.PhaseTimeouts` 可逐次覆盖。网络失败可用 `errors.As` 取得 `*PhaseError`，并继续用 `errors.Is` 判断取消/期限。默认不启用额外阶段计时器，不改变浏览器 Profile；TLS setup、排队与代理限制见 [API 与配置](docs/API.md)。
 
+每请求 `NetworkOptions.LocalAddress` 可绑定源 IP，`Interface` 可在 Linux 通过 `SO_BINDTODEVICE` 绑定网卡；覆盖普通/流式/Raw 的实际 TCP socket，并按完整策略隔离连接池。仅支持直连，不绑定 DNS 查询；失败明确返回错误，不静默回退。示例、权限、地址族和连接生命周期见 [绑定指南](docs/NETWORK-BINDING.md)。
+
 ## 能力与包
 
 | 层次 | 包 | 用途 |

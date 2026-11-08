@@ -107,11 +107,13 @@ req := &netloom.Request{
 - Resolve、ConnectTo 均按主机和端口精确匹配；规则端口与替换端口必须为 1..65535，没有通配符、CIDR、零端口继承或递归替换。先应用一次 ConnectTo，再以有效目标匹配 Resolve；Resolve 不匹配时解析有效目标，而非原始逻辑主机。HTTP/HTTPS 的原始缺省端口分别为 80/443，每次重连、每跳重定向重新匹配。
 - 主机使用 ASCII/punycode 名或无方括号、无 zone 的 IP。名字标签接受 ASCII 字母、数字、连字符及下划线；匹配时忽略大小写与一个末尾根点，IP 规范化并将 IPv4-mapped IPv6 视作 IPv4。启用非零策略时逻辑 URL 主机同样要求 ASCII/punycode，避免与后端 IDNA 转换不一致；不新增 Unicode 自动转换。重复的规范键、重复 IP、无效的未匹配规则也报错。每种规则最多 64 条，每条 Resolve 需 1..16 个 IP literal，不接受地址字段中的 DNS 名。
 - 地址族为 `""`/`"auto"`、`"ipv4"` 或 `"ipv6"`（对应 AddressFamily 常量）。它筛选最终 IP，包括本地 DNS 答案和 Resolve 候选；与 tcp4/tcp6 冲突、筛选后无候选时失败，不回退其他族。候选顺序依次尝试，共享当前 context/Connect 预算，不实现 Happy Eyeballs；匹配 Resolve 的候选失败后不再偷偷回退 DNS。供给的 IP 不计作 DNS 查询时长。
+- `LocalAddress` 绑定实际 TCP socket 的源 IP，仅接受不含 zone 的明确单播 IP literal；IPv4-mapped 规范化为 IPv4，源地址隐式约束目标地址族，显式族冲突报 `ErrNetworkBindingInvalid`。不接受主机名、端口、未指定/组播/有限广播地址，不指定源端口。
+- `Interface` 仅 Linux，通过实际 socket 的 `SO_BINDTODEVICE` 绑定设备；名称为 1–15 字节可打印 ASCII，排除空白、`/`、`:`、`.`、`..`。非 Linux 在 Validate/BuildRequest 即返回 `ErrNetworkBindingUnsupported`。实际设备/权限/源地址绑定失败返回 `ErrNetworkBinding` 并保留系统原因，不自动重试或退回未绑定连接。只绑定目标 TCP，不约束 DNS resolver 出口；接口存在性和可达性不属于无 IO 验证。完整示例、权限和限制见 [本地源 IP 与 Linux 网卡绑定](NETWORK-BINDING.md)。
 - 非零策略只支持直连；与任意 Proxy 同时使用均返回可由 `errors.Is` 判断的 `ErrNetworkProxyUnsupported`，即便规则未匹配，也不静默忽略。零策略保留既有代理语义；不宣称支持代理端解析控制、代理出口地址族或公共自定义 DNS server 配置。
 - 生产地址保护继续拒绝 loopback、unspecified、link-local，不将 RFC1918 一概拒绝。逻辑 URL 的受阻 IP（含规范等价拼写）不能借映射绕过；每个最终 literal 在实际拨号前检查，DNS 解析后只拨所选 literal，避免二次解析 rebinding。原始逻辑 DNS 名不会为了校验而额外解析。非零策略关闭 CNAME 补充查询，故 CNAME 留空，不额外泄漏逻辑 DNS 或消耗预算。跳过的受阻候选不把其他允许地址的临时连接失败误判为永久阻止。
-- 连接池按完整规范策略隔离：规则顺序不影响身份，但 Resolve IP 的优先顺序影响；nil/空/auto 等价。即便某条规则当前未匹配，策略不同也不串用连接。重定向仍按逻辑 origin 清理跨域凭据；显式映射可能把同一逻辑 origin 的凭据送往另一实际端点，这是调用方授权范围，尤其须注意关闭证书验证时的风险。映射不授予地址保护豁免。
+- 连接池按完整规范策略隔离，包含规范化源 IP 和设备名；等价 IPv4/mapped 源可共享，不同源或设备不能串池。绑定只在新建 socket 时执行，复用不重新检查设备或路由；网络变化后需 FreshConnection 或新 Engine，不自动迁移。规则顺序不影响身份，但 Resolve IP 的优先顺序影响；nil/空/auto 等价。即便某条规则当前未匹配，策略不同也不串用连接。重定向仍按逻辑 origin 清理跨域凭据；显式映射可能把同一逻辑 origin 的凭据送往另一实际端点，这是调用方授权范围，尤其须注意关闭证书验证时的风险。映射不授予地址保护豁免。
 
-`nethttp.RequestInput.Network` 接受同名 `network` JSON 对象：`address_family`、`resolve`（host/port/addresses）、`connect_to`（host/port/connect_host/connect_port）。BuildRequest 校验并深拷贝；不承诺 curl 文本的 `--resolve`/`--connect-to` 解析。
+`nethttp.RequestInput.Network` 接受同名 `network` JSON 对象：`local_address`、`interface`、`address_family`、`resolve`（host/port/addresses）、`connect_to`（host/port/connect_host/connect_port）。BuildRequest 校验并深拷贝；不承诺 curl 文本的 `--resolve`/`--connect-to` 解析。
 
 ### 阶段超时与总体预算
 

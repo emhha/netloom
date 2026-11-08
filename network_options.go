@@ -39,8 +39,9 @@ type ConnectToRule struct {
 	ConnectPort int    `json:"connect_port"`
 }
 
-// NetworkOptions configures bounded per-request, direct-only network mapping.
-// Nil/zero preserves legacy dialing. Rules are exact, without wildcards or
+// NetworkOptions configures per-request direct mapping, address-family selection
+// and TCP source/device binding. Nil/zero preserves legacy dialing.
+// Rules are bounded and exact, without wildcards or
 // recursive rewrites. At most 64 rules of each kind and 16 IPs per Resolve rule
 // are accepted. DNS candidates are tried sequentially, not Happy Eyeballs.
 // A nonzero policy with a proxy is rejected, never silently ignored.
@@ -48,6 +49,12 @@ type NetworkOptions struct {
 	Resolve       []ResolveRule   `json:"resolve,omitempty"`
 	ConnectTo     []ConnectToRule `json:"connect_to,omitempty"`
 	AddressFamily AddressFamily   `json:"address_family,omitempty"`
+	// LocalAddress binds the TCP source IP, never a hostname, wildcard or port.
+	// The destination family must match. DNS traffic is not bound by this option.
+	LocalAddress string `json:"local_address,omitempty"`
+	// Interface binds new TCP sockets to a Linux device with SO_BINDTODEVICE.
+	// It never changes system routes, elevates privileges or falls back unbound.
+	Interface string `json:"interface,omitempty"`
 }
 
 // Validate checks syntax, bounds and duplicate canonical keys, without DNS/IO.
@@ -68,18 +75,20 @@ func (o *NetworkOptions) Clone() *NetworkOptions {
 }
 
 // ErrNetworkProxyUnsupported means a nonzero Network policy was combined with
-// a proxy; proxy-side DNS/mapping/family semantics are not silently approximated.
-var ErrNetworkProxyUnsupported = errors.New("netloom: network mapping/address-family policy requires a direct connection")
+// a proxy; mapping, address-family and binding policies are never silently ignored.
+var ErrNetworkProxyUnsupported = errors.New("netloom: network mapping/address-family/binding policy requires a direct connection")
 
 type networkPlan struct {
-	resolve  map[string][]netip.Addr
-	connect  map[string]string
-	family   AddressFamily
-	identity string
+	resolve      map[string][]netip.Addr
+	connect      map[string]string
+	family       AddressFamily
+	localAddress netip.Addr
+	device       string
+	identity     string
 }
 
 func (p *networkPlan) enabled() bool {
-	return p != nil && (len(p.resolve) > 0 || len(p.connect) > 0 || p.family != AddressFamilyAuto)
+	return p != nil && (len(p.resolve) > 0 || len(p.connect) > 0 || p.family != AddressFamilyAuto || p.bindingEnabled())
 }
 
 type networkPlanKey struct{}
@@ -134,6 +143,9 @@ func compileNetworkOptions(o *NetworkOptions) (*networkPlan, error) {
 	default:
 		return nil, fmt.Errorf("netloom: address family must be auto, ipv4 or ipv6")
 	}
+	if err := compileNetworkBinding(p, o); err != nil {
+		return nil, err
+	}
 	if len(o.Resolve) > 64 || len(o.ConnectTo) > 64 {
 		return nil, fmt.Errorf("netloom: network mapping exceeds 64 rules per kind")
 	}
@@ -182,10 +194,12 @@ func compileNetworkOptions(o *NetworkOptions) (*networkPlan, error) {
 		// JSON map keys are sorted; retain candidate order because fallback order is
 		// observable. This identity is private and never logged or used as evidence.
 		b, err := json.Marshal(struct {
-			Family  AddressFamily
-			Resolve map[string][]netip.Addr
-			Connect map[string]string
-		}{p.family, p.resolve, p.connect})
+			Family       AddressFamily
+			Resolve      map[string][]netip.Addr
+			Connect      map[string]string
+			LocalAddress netip.Addr
+			Interface    string
+		}{p.family, p.resolve, p.connect, p.localAddress, p.device})
 		if err != nil {
 			return nil, err
 		}
@@ -322,6 +336,9 @@ func mappedDialContext(base func(context.Context, string, string) (net.Conn, err
 			conn, err := base(ctx, network, net.JoinHostPort(ip.String(), port))
 			if err == nil {
 				return conn, nil
+			}
+			if errors.Is(err, ErrNetworkBinding) {
+				return nil, err
 			}
 			failures = append(failures, err)
 		}
