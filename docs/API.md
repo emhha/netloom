@@ -19,6 +19,12 @@ func (*Engine) Close() error
 `nethttp.ParseCurl` 不启动 shell、不读文件；`nethttp.BuildRequest` 进行有界请求转换。
 RequestInput 的 FollowRedirects/MaxRedirects、Stream、MaxResponseBytes 是调用方执行提示，不由 BuildRequest 执行；核心正文上限由 Config.MaxBodySize 控制。
 
+### 调度与主机状态生命周期
+
+`Run` 仍为 single-flight，`Submit` 仍为非阻塞接纳，队满、已取消、关闭或无活动 Run 时返回 false。调度器的运行 context、worker 和种子 feeder 保活计数在发布前完成初始化，运行期间不替换 context。`Close` 先拒绝新工作、取消并等待活动 Send/流/Run；Run 的 worker 退出且结果通道关闭后才释放其活动登记（缓冲结果仍可读取）。Pipeline 内不得同步调用所属 Engine.Close，应取消 context；消费者提前停止读取结果时也应取消或关闭 Engine。
+
+主机并发槽按持有者与等待者共同引用计数，最后一个引用释放即移除；不能在仍有等待者时淘汰并创建第二套配额。Send/流共享 Engine 级槽，Run 使用独立调度器配额，彼此不合并。成功主机不保留零错误记录；失败计数与已跳过标记为单次 Run 所有，保留至成功重置或 Run 结束，跳过标记不会被晚到的成功响应撤销。Run 结束后释放全部历史，下一次 Run 不继承；为保持精确错误阈值，单次长 Run 的不同失败/跳过主机数量仍影响内存，不承诺全局固定内存预算。
+
 ## 配置与已有语义
 
 | Config 字段 | 零值/默认行为 |
@@ -204,6 +210,8 @@ StreamResponse.Status() 返回线程安全、可独立修改的 StreamStatus 快
 - Status 可与单个读取者及 Close 并发调用，不允许多个 goroutine 同时读取 Body。EOF 不释放并发槽，仍须显式 Close。
 Raw 不使用 CookieJar；Raw+Proxy 目前明确报错，防止悄悄绕过代理直连。普通和流式的非严格协议模式保留 tls-client 的代理 scheme 支持。HTTP CONNECT 交换使用自有 context-aware 拨号器：取消同时关闭进行中的代理 socket，CONNECT 响应头上限 64 KiB，代理 URL 禁止非根路径/query/fragment，认证只发往代理。HTTPS/SOCKS 等其他 scheme 仍依赖第三方拨号器，其连接/代理握手部分可能只遵守固定正值超时而非实时 context 取消；尚不宣称这些路径与 HTTP CONNECT 有同等取消保证。
 
+非空代理配置在准入前进行本地语法验证，错误通过 `errors.Is(err, netloom.ErrInvalidProxy)` 判断，不重试、不隐式直连，也不累计目标主机错误；Run 按 Task.Mutators 的最终请求验证。只有空字符串表示直连，空白字符串不会被转换为直连。根包支持 HTTP/HTTPS、SOCKS4/SOCKS4A/SOCKS5/SOCKS5H，SOCKS 必须显式给端口；拒绝缺少 scheme/host、无效端口、非根路径、query 和 fragment。配置错误文本不回显代理 URL 或用户名密码；这不是对调用方日志和请求快照的自动脱敏。Raw 与代理仍不兼容，其他协议/TLS/网络选项的组合限制保持不变。
+
 ## 所有权、背压与关闭
 
 Send 将正文读入内存并关闭底层 Body；BodyTruncated 标明主动截断。
@@ -215,6 +223,11 @@ SendStream 的调用方必须关闭 Body，即使已读到 EOF；Close 幂等并
 Run 返回有界结果通道；消费者须持续读取或取消上下文。Submit 队列满、未运行或已关闭时返回 false；Schedule 丢弃该布尔值。
 派生任务使用 Context.TryEmit 处理背压，或 Emit 将拒绝转为 ErrQueueFull；工作线程不会阻塞等待自己的队列。
 Context.Next 支持嵌套的前后处理；当前实现也会继续执行未显式 Next 的后续处理器。要终止必须 Abort。
+
+Task.Mutators 是发送前请求变换阶段：按顺序在请求副本上执行一次，先于 host 配额选择、请求校验和重试；重试复用变换结果，不重复调用 Mutator。副本复制 Header、HeaderOrder、Body、Raw 及 Network/TLS/Auth/Retry/PhaseTimeouts 配置；Upload 仍是共享且管理一次性消费的正文源，Profile 及自定义扩展仍须遵守不可变约定。Mutator 不得保留请求异步修改；跨任务复用的 Mutator 须并发安全。变换失败时不发送、不执行响应 Pipeline，结果 Response.Error 保留错误链。
+
+Task.Pipeline 只处理已取得的响应，不能改变当前线上请求。旧 AsMutator 仅保留给尚无 Response 的独立 Context；用于 Run 的响应 Pipeline 或任何已有 Response 的 Context 时返回 ErrMutatorAfterSend，不再事后改写请求。请将 `Pipeline: []Handler{AsMutator(m), analyze}` 迁移为 `Mutators: []Mutator{m}, Pipeline: []Handler{analyze}`。单独使用 Send/Do 的调用方应在调用前完成请求变换；probe 在构造请求时设置代理、TLS profile 和请求头，响应 Pipeline 仅保留提取器。
+
 Run 和独立 Send 的限流器分别计数；并非跨所有入口的统一速率配额。
 
 Engine.Close 幂等，阻止新工作，取消已有请求及队列、关闭活动流，唤醒租约等待者，并在工作退出后关闭池内空闲连接。
@@ -223,13 +236,26 @@ Engine.Close 幂等，阻止新工作，取消已有请求及队列、关闭活�
 
 ## API 查询包
 
-httpclient 是独立的标准库 HTTP 会话，不能套用根包的零值配置、TLS 指纹或拨号防护。mapping 与 enterprise 使用调用方提供的凭据读取接口，不内置数据库或密钥服务。重试可能产生重复付费请求，须由调用方明确选择。
+httpclient 是独立的标准库 HTTP 会话，不能套用根包的零值配置、TLS 指纹或拨号防护。`NewSession` 保留无 error 返回签名，通过 `Session.Err()` 检查不可变构造错误；无效代理使 Get/Post/Do 在限流和正文重放前返回 `httpclient.ErrInvalidProxy`，不再忽略代理后直连，不支持的 scheme 还可用 `ErrUnsupportedProxy` 判断。其代理支持 HTTP/HTTPS、SOCKS5/SOCKS5H，不支持根包的 SOCKS4。mapping 与 enterprise 使用调用方提供的凭据读取接口，不内置数据库或密钥服务。重试可能产生重复付费请求，须由调用方明确选择。
+
+`httpclient.Options.RetryMethods` 为 nil 时仅 GET/HEAD/OPTIONS 可自动重试，非 nil 空切片禁用全部方法的重试；允许列表在构造时复制，按大写方法 token 精确匹配；非法或非大写项被忽略，全部无效也不会回退默认列表。POST/PATCH 等须由调用方明确加入列表，且正文必须可重放（Post 的字节正文或 Do 的 GetBody）；不可重放的流只发送初次请求。RetryMax/DisableRetries 再限制次数，不自动把非安全方法加入列表。此策略控制 SDK 的重试循环，不承诺 exactly-once；即使是 GET，也可能重复计费，付费查询应明确使用 DisableRetries。禁用本包重试不会禁止 Go 底层 Transport 在复用连接故障等条件下的自动重发，仍需数据源的幂等/计费协议，不能把它当作绝不重复的保证。
+
+mapping/enterprise 区分“缺少凭据”与“读取失败”：nil 读取器或无错误的空/空白必需凭据使用各包的未配置 sentinel，SecretReader.Get 的错误则包装并保留 errors.Is 错误链，返回了字节也不能忽略伴随错误。读取失败不会发起 HTTP 请求。FOFA 的可选邮箱若读取失败同样终止；每次 Search 在分页前读取一次 key/email，下次 Search 重新读取。爱企查每次公开查询重新读取并修剪 Cookie；本包仍不提供凭据存储或错误内容的通用脱敏。
 
 包级配置、响应体所有权、限流与限制分别见 [httpclient](../httpclient/README.md)、[mapping](../mapping/README.md) 和 [enterprise](../enterprise/README.md)。
 
 ## 扩展契约
 
-离线 fingerprint、infoextract、passive 仅依赖 httpdata；不需要创建 Engine。
+离线 fingerprint、infoextract、passive 使用 httpdata 快照，不依赖网络运行时；不需要创建 Engine。`ac` 是独立公共字节串匹配包，导入路径为 `github.com/emhha/netloom/ac`：
+
+```go
+// package ac
+func New([]string) *Matcher
+func (*Matcher) Search([]byte) map[string]struct{}
+func (*Matcher) Match([]byte, func(index int))
+```
+
+`ac` 薄适配固定版本的 Cloudflare ahocorasick，共享扫描统一使用上游 `MatchThreadSafe`。`Search` 返回独立的命中关键词集合；`Match` 每次为每个命中唯一词最多回调一次，提供该词在输入中的第一个原始索引，不承诺顺序或出现次数，适合映射到候选规则。空关键词忽略，重复关键词去重。详细字节匹配及回调契约见 [ac 说明](../ac/README.md)。共享的是匹配引擎，不是 Registry 级的统一预筛选：Registry 不强制所有插件使用 AC，各插件自行选择是否复用。
 指纹推荐通过 Config.RulesDir 显式指定规则目录并加载 sources.json，当前禁用 webfinger、启用 EHole/FingerprintHub/Wappalyzer。配置模式对启用文件的缺失、空文件、无效原生格式返回错误；不与逐文件字段混用。
 
 保留 WebfingerYAML、CustomRulesDir、WappalyzerJSONPath，新增 EHoleJSONPath、FingerprintHubJSONPath 作为独立显式输入，不读取 sources.json。旧 YAML/Wappalyzer 输入保持原有缺失文件降级语义；两个新原生 JSON 输入返回加载错误。零值配置不读文件。规则来源与格式细节见 [规则说明](../fingerprint/rules/README.md)。
@@ -239,9 +265,20 @@ MatchExchange(ctx, *httpdata.Request, *httpdata.Response) 额外校验 Fingerpri
 EHole/FingerprintHub 的 AC、图标及正则字面量索引在 New 时构建，Engine 可并发复用。正文转换和请求约束缓存均限于单次调用，不共享可变匹配状态。优化不改变条件、结果顺序、版本或置信度；缺少可证明必要的字面量时会退回完整正则检查。详见 [性能记录](PERFORMANCE.md)。
 
 webfinger.go 提供独立 WebfingerMatcher、LoadWebfingerYAML 与 Len（包含仅图标规则的去重技术数），和其他来源保持同类入口结构。Engine 不再持有 webfinger 的 AST/AC/图标内部状态；底层 lexer/parser/ast/compiler 继续独立组织。默认来源开关保持不变。
-infoextract 默认仅加载高敏感凭据类规则，可 AddRule 显式扩展；邮箱、内网 IP、linkfinder 等不属于当前内置规则。passive.New 显式选择插件与内存缓存容量。
+infoextract 复用公共 `ac` 筛选触发词，仍可通过 `infoextract.New` 独立使用；`Extract`、`ExtractWithContentType`、`AddRule` 与既有 `plugins.Information` 插件入口保留。默认仅加载高敏感凭据类规则，可 AddRule 显式扩展；邮箱、内网 IP、linkfinder 等不属于当前内置规则。有触发词的规则在任一触发词命中后执行正则，无触发词规则保留 fallback；正文/响应头路由与结果语义不变。独立调用和扩展规则的约束见 [infoextract 说明](../infoextract/README.md)。passive.New 显式选择插件与内存缓存容量。
+
+`InfoExtractor.Snapshot()` 捕获不可变规则、AC 索引及 `Identity()`；身份仅在进程内唯一，不是持久化版本号。成功 `AddRule` 发布新身份，失败不改变当前代次。直接提取的一次调用也固定正文和响应头使用同一快照。`plugins.Information` 每次分析绑定同一代次的正文/响应头缓存，规则更新后不命中旧代次结果；在途旧分析允许按原快照完成，但不污染新缓存。配置字段 `Extractor`、`CacheLimit` 不应在分析期间并发写入；提取器本身允许并发 `AddRule`。nil Extractor 返回错误；Information 元数据版本为 `"4"`。
+
+`passive/plugins.Serialization` 实现 `passive.Plugin`，零值可用；通过 `passive.New([]passive.Plugin{&plugins.Serialization{}}, cacheLimit)` 显式注册，ID 为 `serialization`、Version 为 `"1"`，不自动启用。它纯离线扫描请求 URL/头/正文和响应头/正文，仅做一层 URL/form 与有界标准/URL-safe Base64 解码，不反序列化、不联网、不解压/解密或跨流关联。每输入固定总扫描 1 MiB、128 个观察面、64 个 findings；超限或输入 Response.BodyTruncated 时标记 Result.Truncated。
+
+Serialization 的文本规则复用公共 `ac` 筛选候选，仅对候选执行相应正则；可证明等价的安全固定字面量规则直接命中，无法安全提取必要触发词的规则保留完整正则 fallback。大小写不敏感的 `rememberMe` 继续使用正则 fallback，避免以 ASCII 大小写预筛选漏掉 Go 正则支持的 Unicode 折叠匹配。二进制 magic 保持前缀检查，不改为任意位置的 AC 命中；URL/Base64 观察流程、上述 1 MiB/128/64 预算、finding 顺序与输出语义不变。
+
+公开 `plugins.SerializationFinding` 包含 Format、Rule、Strength、Scope、Encoding、Evidence 字段；`Result.Data` 为 `{findings: [{format, rule, strength, scope, encoding, evidence}], passive_only: true}` JSON。Serialization.CacheKey 返回空字符串，禁用结果缓存。strength 的 strong/medium/weak 仅表示特征强度，不代表漏洞；响应内容特征降级，错误串仅作响应线索。Artifacts 的 Type 为 `serialization_hint`，Rule/Scope 对应规则和观察位置，Value 仅含格式名及强度；evidence 为有界特征标签，不回显原始敏感值。完整调用示例、解码边界和误判说明见 [内置被动插件](../passive/plugins/README.md)。
 
 probe.Run 返回结果通道，dirscan.Run 返回结果切片。调用方负责目标授权；无数据库或任务服务。
+
+`dirscan.Config.Threads` 为每目录的有界请求/重排窗口（默认 30），Engine 的全局与同主机并发上限与其一致，仍受默认 150 次逻辑请求/秒准入限流约束。worker 仅发送请求，单协调器按派发顺序聚合；目录和 wildcard 校准保持串行。Crawl 优先尚未派发的字典，不抢占在途任务；并发发现会影响后续派发顺序。取消或 MaxTime 到期停止派发并等待在途退出，保留已完成且通过过滤/去重的结果并返回 context 错误。连续错误达到阈值仅停止该目录，最多已有 Threads-1 个后续任务被接纳。字数/行数过滤使用正文实际计数。窗口不限制整个发现队列或结果总量；完整语义见 [目录扫描说明](../dirscan/README.md)。
+
 BuildWordlist 优先使用 Config.Wordlist；其他预设需 WordlistDir，目录结构沿用 categories、custom、dicc.txt。
 LoadWordlist(base, path) 支持显式文件或 CATEGORY: 名称；LoadFrameworkByFingerprint(base, labels) 使用显式基目录。
 不再提供会创建用户文件的 InitWordlistDir。

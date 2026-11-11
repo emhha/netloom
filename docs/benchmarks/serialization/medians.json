@@ -1,0 +1,206 @@
+{
+  "benchmark-cloudflare.txt": {
+    "BenchmarkSerializationAnalyze/256KiB-nohit/AC": {
+      "ns/op": 9516262.0,
+      "B/op": 11359.0,
+      "allocs/op": 240.0
+    },
+    "BenchmarkSerializationAnalyze/256KiB-nohit/linear": {
+      "ns/op": 141570740.0,
+      "B/op": 176040.0,
+      "allocs/op": 285.0
+    },
+    "BenchmarkSerializationAnalyze/4KiB-nohit/AC": {
+      "ns/op": 237819.0,
+      "B/op": 11433.0,
+      "allocs/op": 240.0
+    },
+    "BenchmarkSerializationAnalyze/4KiB-nohit/linear": {
+      "ns/op": 2112810.0,
+      "B/op": 13305.0,
+      "allocs/op": 239.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-dense/AC": {
+      "ns/op": 21060739.0,
+      "B/op": 37794.0,
+      "allocs/op": 220.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-dense/linear": {
+      "ns/op": 28952578.0,
+      "B/op": 75304.0,
+      "allocs/op": 228.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-mixed/AC": {
+      "ns/op": 19154290.0,
+      "B/op": 24010.0,
+      "allocs/op": 264.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-mixed/linear": {
+      "ns/op": 29304853.0,
+      "B/op": 18192.0,
+      "allocs/op": 268.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-nohit/AC": {
+      "ns/op": 2351267.0,
+      "B/op": 12290.0,
+      "allocs/op": 240.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-nohit/linear": {
+      "ns/op": 38391654.0,
+      "B/op": 68877.0,
+      "allocs/op": 254.0
+    },
+    "BenchmarkSerializationAnalyze/encoded-fields/AC": {
+      "ns/op": 112874.0,
+      "B/op": 13688.0,
+      "allocs/op": 276.0
+    },
+    "BenchmarkSerializationAnalyze/encoded-fields/linear": {
+      "ns/op": 726134.0,
+      "B/op": 14813.0,
+      "allocs/op": 275.0
+    },
+    "BenchmarkSerializationPipeline/binary-response/AC": {
+      "ns/op": 4110814.0,
+      "B/op": 4933.0,
+      "allocs/op": 17.0
+    },
+    "BenchmarkSerializationPipeline/binary-response/linear": {
+      "ns/op": 57585870.0,
+      "B/op": 106200.0,
+      "allocs/op": 37.0
+    },
+    "BenchmarkSerializationPipeline/form-base64/AC": {
+      "ns/op": 41942.0,
+      "B/op": 6155.0,
+      "allocs/op": 113.0
+    },
+    "BenchmarkSerializationPipeline/form-base64/linear": {
+      "ns/op": 205044.0,
+      "B/op": 6385.0,
+      "allocs/op": 112.0
+    },
+    "BenchmarkSerializationPipeline/json-response/AC": {
+      "ns/op": 5823020.0,
+      "B/op": 16787.0,
+      "allocs/op": 220.0
+    },
+    "BenchmarkSerializationPipeline/json-response/linear": {
+      "ns/op": 44859715.0,
+      "B/op": 53309.0,
+      "allocs/op": 230.0
+    },
+    "BenchmarkSerializationText/256KiB-nohit/AC": {
+      "ns/op": 9112407.0,
+      "B/op": 1822.0,
+      "allocs/op": 1.0
+    },
+    "BenchmarkSerializationText/256KiB-nohit/linear": {
+      "ns/op": 189160252.0,
+      "B/op": 89520.0,
+      "allocs/op": 32.0
+    },
+    "BenchmarkSerializationText/4KiB-nohit/AC": {
+      "ns/op": 135575.0,
+      "B/op": 74.0,
+      "allocs/op": 0.0
+    },
+    "BenchmarkSerializationText/4KiB-nohit/linear": {
+      "ns/op": 2912077.0,
+      "B/op": 2143.0,
+      "allocs/op": 0.0
+    },
+    "BenchmarkSerializationText/64KiB-dense/AC": {
+      "ns/op": 20427542.0,
+      "B/op": 510.0,
+      "allocs/op": 3.0
+    },
+    "BenchmarkSerializationText/64KiB-dense/linear": {
+      "ns/op": 41293798.0,
+      "B/op": 29922.0,
+      "allocs/op": 14.0
+    },
+    "BenchmarkSerializationText/64KiB-mixed/AC": {
+      "ns/op": 20528797.0,
+      "B/op": 5227.0,
+      "allocs/op": 6.0
+    },
+    "BenchmarkSerializationText/64KiB-mixed/linear": {
+      "ns/op": 45993668.0,
+      "B/op": 29840.0,
+      "allocs/op": 10.0
+    },
+    "BenchmarkSerializationText/64KiB-nohit/AC": {
+      "ns/op": 2187685.0,
+      "B/op": 898.0,
+      "allocs/op": 0.0
+    },
+    "BenchmarkSerializationText/64KiB-nohit/linear": {
+      "ns/op": 46079283.0,
+      "B/op": 27741.0,
+      "allocs/op": 3.0
+    },
+    "BenchmarkSerializationText/encoded-fields/AC": {
+      "ns/op": 32338.0,
+      "B/op": 18.0,
+      "allocs/op": 0.0
+    },
+    "BenchmarkSerializationText/encoded-fields/linear": {
+      "ns/op": 679639.0,
+      "B/op": 613.0,
+      "allocs/op": 0.0
+    }
+  },
+  "benchmark-pipeline-1s.txt": {
+    "BenchmarkSerializationAnalyze/64KiB-dense/AC": {
+      "ns/op": 20423139.0,
+      "B/op": 16142.0,
+      "allocs/op": 211.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-dense/linear": {
+      "ns/op": 30138922.0,
+      "B/op": 15544.0,
+      "allocs/op": 208.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-nohit/AC": {
+      "ns/op": 2271379.0,
+      "B/op": 11402.0,
+      "allocs/op": 240.0
+    },
+    "BenchmarkSerializationAnalyze/64KiB-nohit/linear": {
+      "ns/op": 32302558.0,
+      "B/op": 14750.0,
+      "allocs/op": 239.0
+    },
+    "BenchmarkSerializationPipeline/binary-response/AC": {
+      "ns/op": 3794432.0,
+      "B/op": 1142.0,
+      "allocs/op": 16.0
+    },
+    "BenchmarkSerializationPipeline/binary-response/linear": {
+      "ns/op": 46343151.0,
+      "B/op": 11207.0,
+      "allocs/op": 16.0
+    },
+    "BenchmarkSerializationPipeline/form-base64/AC": {
+      "ns/op": 36867.0,
+      "B/op": 6141.0,
+      "allocs/op": 113.0
+    },
+    "BenchmarkSerializationPipeline/form-base64/linear": {
+      "ns/op": 176609.0,
+      "B/op": 6232.0,
+      "allocs/op": 112.0
+    },
+    "BenchmarkSerializationPipeline/json-response/AC": {
+      "ns/op": 5017642.0,
+      "B/op": 11232.0,
+      "allocs/op": 218.0
+    },
+    "BenchmarkSerializationPipeline/json-response/linear": {
+      "ns/op": 43770010.0,
+      "B/op": 11050.0,
+      "allocs/op": 217.0
+    }
+  }
+}

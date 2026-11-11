@@ -28,4 +28,6 @@ EHole 与 FingerprintHub 的解析、索引和匹配由本库实现，不引入�
 
 Go 依赖由 [go.mod](../go.mod) 和 [go.sum](../go.sum) 固定版本，各依赖保留自身许可证。可执行 `go list -m all` 查看依赖清单。
 
+共享 `ac` 包薄适配 [Cloudflare ahocorasick](https://github.com/cloudflare/ahocorasick)，固定版本 `v0.0.0-20240916140611-054963ec9396`，对应提交 `054963ec939627782012c7c34eefd2942488d4e1`。上游版权为 CloudFlare, Inc.，采用 [BSD-3-Clause](https://github.com/cloudflare/ahocorasick/blob/054963ec939627782012c7c34eefd2942488d4e1/LICENSE)，保留[原许可文本](../ac/LICENSE.cloudflare)。不复制或重署名其匹配内核；源代码及二进制再分发须遵守原许可的版权、条件与免责声明要求。Go module 校验值为 `h1:W2HK1IdCnCGuLUeyizSCkwvBjdj0ZL7mxnJYQ3poyzI=`，依赖清单校验值见 [go.sum](../go.sum)。接口及线程安全约束见 [ac 说明](../ac/README.md)，选型与测量见 [AC 库选型](AC-SELECTION.md)。
+
 GeoIP 的 MMDB/CDN 数据由调用方自行提供；本仓库不捆绑第三方数据库。数据许可、下载授权和使用限制由供应方分别定义，不随 SDK 许可自动取得。

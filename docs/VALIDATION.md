@@ -1,5 +1,124 @@
 # 验证记录
 
+## 2026-11-11：调度并发、主机回收、代理与 API 查询安全
+
+工具链 Go 1.26.3 linux/amd64、Python 3.14.8。执行并通过：
+
+```sh
+go test . ./httpclient ./nethttp ./internal/proxyconfig
+go test -race . ./httpclient ./nethttp ./internal/proxyconfig -run 'Proxy|CurlUnsupported|TestParse$' -count=1
+go test -race . -run '^Test(EngineLifecycleRegression|HostSemaphore|EngineSendReleasesDistinctHostState|SchedulerHostErrorHistoryIsRunScoped)' -count=10 -timeout=180s
+go test -race ./mapping ./enterprise -count=5 -timeout=90s
+go test -race ./httpclient -run 'Test(RetryMethods|PostRetriesRequireExplicitMethod|RetryCountsAndDisablePrecedence|DoRetryBodyReplayGate|DoGetBodyFailureStopsBeforeSend|DoEmptyBodiesAndExactMethods|ExplicitPostRetryCanceledAfterResponse)' -count=20
+make check && make race && make integration-compile && make integration-local
+git diff --check
+```
+
+- `make check` 的格式、文档/仓库边界检查、19 个 Python 离线测试、50 个固定字典文件校验、全包默认测试、vet 和构建通过。全包 race 通过，无已报告数据竞争；根包为 23.651s，部分已验证包使用 Go 缓存。
+- scheduler 回归用 channel 屏障和注入 transport 检查初始化完成后发布、Run/Submit/Close 启动竞争、single-flight/复用、多个 Close 等待在途工作和结果通道关闭。主机测试检查等待者与持有者共享同一配额、取消后安全回收、不同主机 Send 无空闲槽残留、成功重置计数、跳过在 Run 内 sticky、Run 结束释放错误历史 map。最终这组 race 重复 10 轮通过（1.892s）。重复竞争不是全部线程交错的证明，单个长期 Run 的不同失败主机历史仍可能增长。
+- 代理测试覆盖共同解析和各包支持集合、入口和 transport/retry 后备校验、Mutators 修复/制造无效配置、限流/准入/GetBody/发送前拒绝、错误及日志不回显代理凭据，以及配置错误不计目标失败。本地 HTTP 转发/认证和 CONNECT 取消有实际网络回归；HTTPS/SOCKS 的语法与构造验证不代表这些外部代理端到端验收。
+- 凭据 fake reader/client 检查存储失败/取消/deadline 的错误链、同时返回字节和错误时禁止发送、缺失/空白与读取故障分离、FOFA 的分页快照和后续轮换、三个测绘引擎 trim/轮换及窄客户端接口、爱企查五个 API 与既有字段校验顺序。mapping/enterprise 最终 race 重复 5 轮通过（1.084s/10.028s），没有真实数据源请求。
+- 会话重试测试检查 GET/HEAD/OPTIONS 默认列表、POST 显式允许、nil/空/非法列表与配置复制、空方法及大小写精确匹配、正文双重门禁、次数开关优先级、GetBody 失败、响应体排空/关闭和最终所有权、网络耗尽与取消错误链。专项 race 重复 20 轮通过（1.437s）。这只验证 SDK 循环，不承诺业务幂等、账单去重或 exactly-once；底层 Transport 仍可能透明重发。
+- 集成编译仅证明带 tag 的代码可编译；另执行 `make integration-local`，根包为 17.600s，真实运行受控本地 TLS/mTLS、代理及流关闭等回归。该目标明确排除根包/probe 的 `TestPythonCookieServerE2E` 外部 Cookie 服务用例，不将其排除或其他环境分支的跳过计作验收通过。未修改 DNS/hosts 或关闭生产拨号保护，未访问真实付费 API 或外网目标，也未执行吞吐/峰值内存验收。
+- 初次仓库检查将共享私有解析包误判为扩展依赖；仅为 `internal/proxyconfig` 增加精确允许项，同时反向检查其不得依赖运行时/扩展，并补充离线允许/拒绝用例，未放开其他内部包或 httpdata 的边界。早期 curl 负例误用了已支持的短选项前缀，重试测试误比较被 http.Client 超时包装的正文指针；分别修正夹具和行为断言后重跑通过，没有通过放宽生产约束或跳过断言规避失败。
+
+## 2026-11-11：目录扫描有界并发与聚合
+
+工具链 Go 1.26.3 linux/amd64、Python 3.14.8。执行并通过：
+
+```sh
+go test ./dirscan
+go test -race ./dirscan -run '^TestScanConcurrency' -count=30 -timeout=90s
+make check && make race && make integration-compile
+git diff --check
+```
+
+- `make check` 的格式、文档/仓库检查、17 个 Python 离线测试、50 个固定字典文件校验、全包默认测试、vet 和构建通过。全包 race 通过，dirscan 为 3.286s；未受影响的部分包使用 Go 缓存。集成测试仅编译，不视为集成服务执行证据。
+- 新增回归通过 fake engine 和 channel 屏障验证 Threads 1/3/7 的真实重叠与峰值上限、默认窗口 30、慢队首时已完成的乱序响应继续占用窗口，以及派发序的结果、去重与 wildcard 分类。
+- 验证取消/手动触发的 deadline 错误传播、成功乱序响应保留、返回前全部 worker 退出；原生命周期测试仍覆盖真实 context deadline、公开入口预取消和准备前 MaxTime 到期。未声称真实网络扫描中途 MaxTime 的端到端覆盖。
+- 验证 Send error、nil 响应和 Response.Error 连续失败计数、成功重置、阈值后成功尾部响应不会恢复派发；验证串行 Crawl 优先、并发 Crawl 的固定根/深度与目录串行，以及四种正文词数/行数过滤。
+- 最终专项 race 重复 30 轮通过（3.320s），未报告数据竞争。早期测试失败来自默认扩展补齐、自链接正文和屏障观察计数的夹具问题；修正后重跑通过，没有用放宽生产保护或跳过断言代替修复。
+- 窗口只限制请求与未聚合响应，不限制整个字典、发现队列和结果总量。fake engine 验证 worker/协调器契约，不证明真实网络同主机吞吐或性能收益；未访问外网、真实付费 API 或外部集成服务。
+
+## 2026-11-10：请求变换、扫描生命周期与规则缓存
+
+工具链 Go 1.26.3 linux/amd64、Python 3.14.8。执行并通过：
+
+```sh
+go test . ./probe ./dirscan ./infoextract ./passive/plugins
+make check && make race && make integration-compile
+git diff --check
+```
+
+- `make check` 的格式、文档/仓库检查、17 个 Python 离线测试、50 个固定字典文件校验、全包默认测试、vet 和构建通过；部分未受影响测试使用 Go 缓存。
+- 全包 race 通过，无已报告数据竞争；集成测试仅编译，不将其视为集成服务执行证据。
+- Task Mutators 回归验证顺序、线上实际方法/URL/请求头/正文、原请求隔离、重试不重复变换、变换错误阻止发送与分析，以及响应上下文中旧适配器的明确错误；probe 回归验证请求构造时设置选项、自定义 User-Agent 优先及响应提取不运行 mutator。
+- dirscan 使用 fake engine 验证实际递归/Crawl 队列的固定根深度、非根 BaseURL 的相对/绝对链接及根外拒绝、取消/deadline 的空或部分结果和错误传播。公开入口覆盖预取消和准备前 MaxTime 到期；未声称真实网络扫描中途 MaxTime 的端到端覆盖，未改变同步扫描模型。
+- infoextract 与 Information 验证新增/替换/失败规则更新、跨实例身份、旧在途 Registry 完成不污染新代，以及并发 AddRule 时正文/响应头的同代次一致性。
+- 初次验证被默认 Go 缓存写权限阻止；缓存允许写入后以正常 Go 配置重跑。中间出现的测试编译错误已修复，没有跳过测试或变更全局 Go 配置。本次未执行外部服务、真实付费 API、外网目标或性能验收。
+
+## 2026-11-10：Cloudflare 共享 AC 接入
+
+工具链 Go 1.26.3 linux/amd64、Python 3.14.8。共享 `ac` 薄适配固定版本 `github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396`；本条是接入后验证，区别于下方仅评选库的历史记录。执行并通过：
+
+```sh
+go mod tidy
+make check
+make race
+make integration-compile
+go test ./passive/plugins -run '^$' -fuzz '^FuzzSerializationACEquivalence$' -fuzztime=5s -parallel=2
+git diff --check
+```
+
+- `make check` 的格式/文档/仓库检查、17 个 Python 离线测试、50 个字典文件校验、全包默认测试、vet 和构建通过。未受改动的部分包使用 Go 测试缓存。
+- 全包 race 通过；`ac` 8.364s、`infoextract` 1.366s、`passive/plugins` 34.620s，无已报告数据竞争。
+- AC 适配测试覆盖 400 组固定随机任意字节、空词/重复词、第一个原始下标、重叠/后缀、大小写、NUL/非法 UTF-8、nil/零值及并发 `Search`/`Match`。仅承诺每次扫描唯一词集合，不承诺 occurrence 顺序或次数。
+- infoextract 保留触发词/fallback、正文/头部路由和规则顺序；验证同词触发多规则、替换/追加、规则和 matcher 快照、并发读写、调用方 `Triggers` 切片隔离及只有空字符串的非空触发词切片语义。规则发布采用 copy-on-write，避免同名替换改写旧读者持有的 backing array。
+- Serialization 对照冻结线性实现，比较完整 Result（含 JSON、Artifacts、顺序及截断），覆盖全部文本规则正例、随机字节、URL/form/头部/Base64/二进制、1 MiB/128 surfaces/64 findings、输入截断、64 位候选边界与共享实例并发。冻结表另逐项断言 regex、规则属性、magic 和预算，防止 oracle 拷贝漂移。
+- 文本预筛选/字面量替代的短时 fuzz 通过：2 个 worker、40,843 次执行、84 个新增 interesting 输入；这不是全解码管线的 fuzz 或长期流量证明。完整解码管线由确定性对照测试覆盖。
+- fingerprint 匹配内核未修改；Registry 不新增统一 AC 策略。Serialization 不改变安全边界，不执行反序列化、联网、解压或解密。
+- 集成测试仅编译，未执行本地或外部集成服务。初次命令因默认 Go 构建缓存只读中断，经授权原样重跑成功；未修改全局 Go 配置或迁移缓存以绕过限制。
+- 插件性能在上述验证结束后单独测量，结果与原始输出见 [Serialization 性能记录](PERFORMANCE-serialization.md)；不将库级选型数字当作完整插件收益。
+
+## 2026-11-10：AC 库选型对照
+
+工具链 Go 1.26.3 linux/amd64，候选版本、冻结语料、原始输出和复现源码见 [AC 库选型](AC-SELECTION.md)。在独立临时评测模块执行并通过：
+
+```sh
+go test -race -v ./...
+go test -race -run '^TestVariedEquivalence$' -v -count=1
+go test -run '^TestRetainedHeap$' -v -count=1 -cpu=4
+go test -run '^$' -bench 'BenchmarkScan|BenchmarkParallelScan|BenchmarkBuild' -benchmem -benchtime=100ms -count=3 -cpu=4
+go test -run '^$' -bench '^BenchmarkVaried$' -benchmem -benchtime=100ms -count=3 -cpu=4
+```
+
+- Cloudflare TS、Bobu Walk、petar NFA/DFA 与逐词 `bytes.Contains` 在统一关键词集合口径下，通过 120 组固定随机字节/字典、8 goroutine 共享实例以及 JSON/二进制补充对照；race 无已报告竞争。anknown 为 rune API，静态筛除，未将其宣称为实测候选。
+- Bobu 稳定版和固定新版分别验证；表格的主要比较使用明确锁定的新版，不把其 API/内存优势冒充稳定标签行为。
+- 记录的是合成语料库级基准、构建分配和近似保留堆，不是端到端插件收益、峰值 RSS 或生产流量验收。
+- 下载依赖时因默认 Go 模块缓存只读中断，经授权原命令重试成功；只更新临时评测模块，SDK 主模块依赖无差异，复现附件以文本保存，SDK 仍为单一 module。
+- 本次未执行第三方内核接入，也没有重跑全仓 `make check` / `make race` / `make integration-compile`；以下早先插件验证结果不得据此解释为当前共享 AC 重构已验证完成。
+
+## 2026-11-10：序列化特征被动插件
+
+工具链为 Go 1.26.3 linux/amd64、Python 3.14.8。最终实现执行并通过：
+
+```sh
+go test ./passive/...
+go test ./passive/plugins -run '^$' -fuzz '^FuzzSerialization$' -fuzztime=3s -parallel=2
+make check
+make race
+make integration-compile
+git diff --check
+```
+
+- 新增插件回归覆盖各格式 magic、标准/URL-safe Base64（含短值与 padding 校验）、URL/form 字段、Cookie/JSON 载体、响应降级、普通依赖错误负例、输入只读与输出脱敏，以及扫描/头部预处理/findings 上限和取消。
+- `make check` 的文档/仓库检查、17 个 Python 离线测试、50 个字典文件校验、全包测试、vet 和构建通过；全包 race 通过，插件包 15.442s，无已报告数据竞争。
+- 短时 fuzz 通过，2 个 worker 执行 24,467 次，未发现崩溃或输出上限断言失败；不替代长期 fuzz 或性能验收。
+- 集成测试仅编译，未执行本地或外部集成服务；不将编译结果视为协议或漏洞验证。
+- 初次全仓验证因 Go 构建缓存只读而中断，经授权以原命令重跑成功；未修改全局 Go 配置。
+
+检测仅消费合成或已捕获 HTTP 快照，不执行反序列化、解压、解密、探测或跨流关联；格式线索不等于服务端入口或漏洞。使用与边界见 [插件说明](../passive/plugins/README.md)。
+
 ## 验证范围
 
 正式 module 路径为 `github.com/emhha/netloom`，根包仍为 `netloom`。本记录仅描述独立 SDK 的验证结果；发布与远程服务不属于本地测试的证明范围。

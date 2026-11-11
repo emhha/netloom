@@ -1,0 +1,253 @@
+package evaluation
+
+import (
+	"bytes"
+	"fmt"
+	"math/rand"
+	"runtime"
+	"sort"
+	"sync"
+	"testing"
+
+	bobu "github.com/BobuSumisu/aho-corasick"
+	cloud "github.com/cloudflare/ahocorasick"
+	petar "github.com/petar-dambovaliev/aho-corasick"
+)
+
+type scanner func([]byte, []bool)
+type backend struct {
+	name  string
+	build func([]string) scanner
+}
+
+var backends = []backend{
+	{"Cloudflare-TS", func(words []string) scanner {
+		m := cloud.NewStringMatcher(words)
+		return func(data []byte, seen []bool) {
+			for _, i := range m.MatchThreadSafe(data) {
+				seen[i] = true
+			}
+		}
+	}},
+	{"Bobu-Walk", func(words []string) scanner {
+		m := bobu.NewTrieBuilder().AddStrings(words).Build()
+		return func(data []byte, seen []bool) {
+			m.Walk(data, func(_, _, index uint32) bool { seen[index] = true; return true })
+		}
+	}},
+	{"Petar-NFA", func(words []string) scanner {
+		b := petar.NewAhoCorasickBuilder(petar.Opts{MatchKind: petar.StandardMatch, DFA: false})
+		m := b.Build(words)
+		return func(data []byte, seen []bool) {
+			it := m.IterOverlappingByte(data)
+			for hit := it.Next(); hit != nil; hit = it.Next() {
+				seen[hit.Pattern()] = true
+			}
+		}
+	}},
+	{"Petar-DFA", func(words []string) scanner {
+		b := petar.NewAhoCorasickBuilder(petar.Opts{MatchKind: petar.StandardMatch, DFA: true})
+		m := b.Build(words)
+		return func(data []byte, seen []bool) {
+			it := m.IterOverlappingByte(data)
+			for hit := it.Next(); hit != nil; hit = it.Next() {
+				seen[hit.Pattern()] = true
+			}
+		}
+	}},
+	{"BytesContains", func(words []string) scanner {
+		patterns := make([][]byte, len(words))
+		for i, w := range words {
+			patterns[i] = []byte(w)
+		}
+		return func(data []byte, seen []bool) {
+			for i, word := range patterns {
+				seen[i] = bytes.Contains(data, word)
+			}
+		}
+	}},
+}
+
+// Identical normalized unique keyword sets for every backend. Library wrappers
+// deliberately do not promise occurrence order or offsets: the business output
+// is the set of matched keyword IDs. Empty/duplicate words are normalized once.
+func unique(words []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range words {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+var dictionaries = map[string][]string{
+	"information":   unique([]string{"AKIA", "aws_secret", "AWS_SECRET", "-----BEGIN", "eyJ", "ghp_", "github_token", "xoxb-", "xoxp-", "xoxa-", "sk_live_", "sk_test_", "LTAI", "AKID", "mysql://", "postgres://", "mongodb://", "redis://", "access_token", "accessToken", "ACCESS_TOKEN", "Bearer ", "api_key", "apiKey", "API_KEY", "x-api-key"}),
+	"serialization": unique([]string{"O:", "C:", "a:", "s:", "phar://", "__HALT_COMPILER", "<java", "java.lang.ProcessBuilder", "<void", "<dynamic-proxy", "<sorted-set", "<tree-map", "<converter", "!!python/", "!!javax.script.ScriptEngineManager", "!!", "tag:yaml.org,2002", "@type", "@class", "[", "$type", "TypeNameHandling", "c__builtin__\n", "cbuiltins\n", "cos\nsystem\n", "cposix\nsystem\n", "cnt\nsystem\n", "__reduce__", "GLOBAL", "_$$ND_FUNC$$_", "child_process", "System.Runtime.Serialization", "__VIEWSTATE", "application/x-java-serialized-object", "application/x-hessian", "application/x-amf", "/messagebroker/amf", "application/octet-stream", "/wls-wsat/", "/_async/", "/invoker/JMXInvokerServlet", "t3 ", "StreamCorruptedException", "InvalidClassException", "java.io.ObjectInputStream", "unserialize(): Error at offset", "__wakeup", "__destruct", "UnpicklingError", "autoType is not support", "set autoTypeSupport", "ForbiddenClassException", "Global tag is not allowed", "ConstructorException", "Invalid element qName:", "InvalidDefinitionException", "SerializationException"}),
+}
+
+func TestSetEquivalence(t *testing.T) {
+	r := rand.New(rand.NewSource(1999))
+	for run := 0; run < 120; run++ {
+		words := []string{"", "he", "she", "hers", "his", "a", "aa", "aaa", "\x00\xff", "\xff", "\xc0", "\xc1", "key", "KEY", "he"}
+		if run > 0 {
+			for j := 0; j < 12; j++ {
+				word := make([]byte, 1+r.Intn(12))
+				r.Read(word)
+				words = append(words, string(word))
+			}
+		}
+		words = unique(words)
+		data := make([]byte, r.Intn(1024))
+		r.Read(data)
+		data = append(data, []byte("ushers his aaaaaa KEY key \x00\xff\xc0\xc1")...)
+		for j := 0; j < 4; j++ {
+			data = append(data, []byte(words[r.Intn(len(words))])...)
+		}
+		want := make([]bool, len(words))
+		for i, w := range words {
+			want[i] = bytes.Contains(data, []byte(w))
+		}
+		for _, b := range backends {
+			scan := b.build(words)
+			got := make([]bool, len(words))
+			scan(data, got)
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("run=%d backend=%s keyword=%q got=%v want=%v data=%x", run, b.name, words[i], got, want, data)
+				}
+			}
+		}
+	}
+	for _, b := range backends {
+		t.Run(b.name+"-parallel", func(t *testing.T) {
+			words := dictionaries["serialization"]
+			scan := b.build(words)
+			data := []byte("\x00!!python/object/apply: O: child_process __VIEWSTATE")
+			var wg sync.WaitGroup
+			for worker := 0; worker < 8; worker++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for n := 0; n < 100; n++ {
+						got := make([]bool, len(words))
+						scan(data, got)
+						for i, w := range words {
+							if got[i] != bytes.Contains(data, []byte(w)) {
+								t.Errorf("parallel mismatch %s %q", b.name, w)
+								return
+							}
+						}
+					}
+				}()
+			}
+			wg.Wait()
+		})
+	}
+}
+
+func corpus(words []string) map[string][]byte {
+	repeat := func(s string, n int) []byte { return bytes.Repeat([]byte(s), n/len(s)+1)[:n] }
+	sparse := repeat("<html><p>normal business document</p></html>\n", 64<<10)
+	marker := []byte(words[0] + " " + words[len(words)/2] + " " + words[len(words)-1])
+	copy(sparse[len(sparse)-len(marker):], marker)
+	return map[string][]byte{"4KiB-nohit": repeat("<p>normal business document</p>\n", 4<<10), "64KiB-nohit": repeat("<p>normal business document</p>\n", 64<<10), "256KiB-nohit": repeat("<p>normal business document</p>\n", 256<<10), "64KiB-sparse": sparse, "64KiB-dense": repeat(words[0]+" "+words[len(words)/2]+" "+words[len(words)-1]+"\n", 64<<10)}
+}
+func BenchmarkScan(b *testing.B) {
+	for _, set := range []string{"information", "serialization"} {
+		words := dictionaries[set]
+		samples := corpus(words)
+		names := make([]string, 0, len(samples))
+		for name := range samples {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			data := samples[name]
+			for _, impl := range backends {
+				b.Run(set+"/"+name+"/"+impl.name, func(b *testing.B) {
+					scan := impl.build(words)
+					seen := make([]bool, len(words))
+					scan(data, seen)
+					b.ReportAllocs()
+					b.SetBytes(int64(len(data)))
+					for b.Loop() {
+						clear(seen)
+						scan(data, seen)
+					}
+				})
+			}
+		}
+	}
+}
+func BenchmarkParallelScan(b *testing.B) {
+	for _, set := range []string{"information", "serialization"} {
+		words := dictionaries[set]
+		data := corpus(words)["64KiB-sparse"]
+		for _, impl := range backends {
+			b.Run(set+"/"+impl.name, func(b *testing.B) {
+				scan := impl.build(words)
+				b.ReportAllocs()
+				b.SetBytes(int64(len(data)))
+				b.ResetTimer()
+				b.RunParallel(func(pb *testing.PB) {
+					seen := make([]bool, len(words))
+					for pb.Next() {
+						clear(seen)
+						scan(data, seen)
+					}
+				})
+			})
+		}
+	}
+}
+func BenchmarkBuild(b *testing.B) {
+	for _, set := range []string{"information", "serialization"} {
+		words := dictionaries[set]
+		for _, impl := range backends {
+			b.Run(set+"/"+impl.name, func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					scan := impl.build(words)
+					if scan == nil {
+						b.Fatal("nil")
+					}
+				}
+			})
+		}
+	}
+}
+
+// Approximate retained Go heap, not peak RSS. Explicit GC makes this a cold
+// pool sample; allocator spans/runtime bookkeeping still introduce noise.
+func TestRetainedHeap(t *testing.T) {
+	for _, set := range []string{"information", "serialization"} {
+		words := dictionaries[set]
+		for _, impl := range backends {
+			runtime.GC()
+			var before, built, cold runtime.MemStats
+			runtime.ReadMemStats(&before)
+			scan := impl.build(words)
+			runtime.GC()
+			runtime.ReadMemStats(&built)
+			seen := make([]bool, len(words))
+			scan(corpus(words)["64KiB-sparse"], seen)
+			runtime.GC()
+			runtime.ReadMemStats(&cold)
+			runtime.KeepAlive(scan)
+			t.Logf("%s/%s retained_build_bytes=%d after_cold_scan_bytes=%d", set, impl.name, int64(built.HeapAlloc)-int64(before.HeapAlloc), int64(cold.HeapAlloc)-int64(before.HeapAlloc))
+		}
+	}
+}
+
+func TestDictionarySizes(t *testing.T) {
+	for name, words := range dictionaries {
+		n := 0
+		for _, w := range words {
+			n += len(w)
+		}
+		t.Log(fmt.Sprintf("%s: %d unique words, %d total bytes", name, len(words), n))
+	}
+}

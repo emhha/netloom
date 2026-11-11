@@ -1,5 +1,7 @@
 # 原生指纹匹配性能
 
+本页保留原生指纹匹配的独立测量。共享 Cloudflare AC 的插件级测量另见 [Serialization 性能记录](PERFORMANCE-serialization.md)，不将两套内核或基准混为一谈。
+
 本次只优化 EHole 与 FingerprintHub，规则文件和启用配置保持不变。保留优化前的线性实现于 native_linear_test.go，用作独立回归及性能对照；生产路径不保留两套可选实现。
 
 ## 实现

@@ -1,0 +1,30 @@
+=== RUN   TestSetEquivalence
+=== RUN   TestSetEquivalence/Cloudflare-TS-parallel
+=== RUN   TestSetEquivalence/Bobu-Walk-parallel
+=== RUN   TestSetEquivalence/Petar-NFA-parallel
+=== RUN   TestSetEquivalence/Petar-DFA-parallel
+=== RUN   TestSetEquivalence/BytesContains-parallel
+--- PASS: TestSetEquivalence (2.72s)
+    --- PASS: TestSetEquivalence/Cloudflare-TS-parallel (0.05s)
+    --- PASS: TestSetEquivalence/Bobu-Walk-parallel (0.06s)
+    --- PASS: TestSetEquivalence/Petar-NFA-parallel (0.01s)
+    --- PASS: TestSetEquivalence/Petar-DFA-parallel (0.06s)
+    --- PASS: TestSetEquivalence/BytesContains-parallel (0.00s)
+=== RUN   TestRetainedHeap
+    evaluation_test.go:240: information/Cloudflare-TS retained_build_bytes=844904 after_cold_scan_bytes=851016
+    evaluation_test.go:240: information/Bobu-Walk retained_build_bytes=181048 after_cold_scan_bytes=181048
+    evaluation_test.go:240: information/Petar-NFA retained_build_bytes=54024 after_cold_scan_bytes=54024
+    evaluation_test.go:240: information/Petar-DFA retained_build_bytes=94688 after_cold_scan_bytes=94688
+    evaluation_test.go:240: information/BytesContains retained_build_bytes=-408 after_cold_scan_bytes=-408
+    evaluation_test.go:240: serialization/Cloudflare-TS retained_build_bytes=3436592 after_cold_scan_bytes=3456272
+    evaluation_test.go:240: serialization/Bobu-Walk retained_build_bytes=753832 after_cold_scan_bytes=753944
+    evaluation_test.go:240: serialization/Petar-NFA retained_build_bytes=137640 after_cold_scan_bytes=137640
+    evaluation_test.go:240: serialization/Petar-DFA retained_build_bytes=493440 after_cold_scan_bytes=493440
+    evaluation_test.go:240: serialization/BytesContains retained_build_bytes=1688 after_cold_scan_bytes=1800
+--- PASS: TestRetainedHeap (0.26s)
+=== RUN   TestDictionarySizes
+    evaluation_test.go:251: information: 26 unique words, 200 total bytes
+    evaluation_test.go:251: serialization: 57 unique words, 819 total bytes
+--- PASS: TestDictionarySizes (0.00s)
+PASS
+ok  	ac-evaluation	3.999s

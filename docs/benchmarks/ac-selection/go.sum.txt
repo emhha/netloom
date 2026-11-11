@@ -1,0 +1,12 @@
+github.com/BobuSumisu/aho-corasick v1.0.3 h1:uuf+JHwU9CHP2Vx+wAy6jcksJThhJS9ehR8a+4nPE9g=
+github.com/BobuSumisu/aho-corasick v1.0.3/go.mod h1:hm4jLcvZKI2vRF2WDU1N4p/jpWtpOzp3nLmi9AzX/XE=
+github.com/BobuSumisu/aho-corasick v1.0.4-0.20250611112625-b4b5728e36fc h1:DIzq6oRQCG6nMsfXj09IYaYMHw9qOUOIO6AfP7e+cBA=
+github.com/BobuSumisu/aho-corasick v1.0.4-0.20250611112625-b4b5728e36fc/go.mod h1:vrkxZpoYcFz2uQ45bG31bhXyOyxvV1L66O50jsQeLWA=
+github.com/anknown/ahocorasick v0.0.0-20190904063843-d75dbd5169c0 h1:onfun1RA+KcxaMk1lfrRnwCd1UUuOjJM/lri5eM1qMs=
+github.com/anknown/ahocorasick v0.0.0-20190904063843-d75dbd5169c0/go.mod h1:4yg+jNTYlDEzBjhGS96v+zjyA3lfXlFd5CiTLIkPBLI=
+github.com/anknown/darts v0.0.0-20151216065714-83ff685239e6 h1:HblK3eJHq54yET63qPCTJnks3loDse5xRmmqHgHzwoI=
+github.com/anknown/darts v0.0.0-20151216065714-83ff685239e6/go.mod h1:pbiaLIeYLUbgMY1kwEAdwO6UKD5ZNwdPGQlwokS9fe8=
+github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396 h1:W2HK1IdCnCGuLUeyizSCkwvBjdj0ZL7mxnJYQ3poyzI=
+github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396/go.mod h1:tGWUZLZp9ajsxUOnHmFFLnqnlKXsCn6GReG4jAD59H0=
+github.com/petar-dambovaliev/aho-corasick v0.0.0-20250424160509-463d218d4745 h1:Vpr4VgAizEgEZsaMohpw6JYDP+i9Of9dmdY4ufNP6HI=
+github.com/petar-dambovaliev/aho-corasick v0.0.0-20250424160509-463d218d4745/go.mod h1:EHPiTAKtiFmrMldLUNswFwfZ2eJIYBHktdaUTZxYWRw=

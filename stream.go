@@ -58,6 +58,9 @@ func (e *Engine) SendStream(ctx context.Context, req *Request) (*StreamResponse,
 			finish()
 		}
 	}()
+	if err := validateProxy(req); err != nil {
+		return nil, err
+	}
 	if len(req.Raw) != 0 {
 		return nil, fmt.Errorf("netloom.SendStream: raw requests are unsupported")
 	}

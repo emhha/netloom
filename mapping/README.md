@@ -13,7 +13,7 @@ engine := mapping.NewFofaEngine(session, secrets, "")
 results, err := engine.Search(ctx, engine.ConvertQuery("example.com"), 100)
 ```
 
-分别导入 `github.com/emhha/netloom/httpclient` 和 `github.com/emhha/netloom/mapping`；`secrets` 和 `ctx` 由调用方提供。禁用重试可避免自动重复可能收费的请求。
+分别导入 `github.com/emhha/netloom/httpclient` 和 `github.com/emhha/netloom/mapping`；`secrets` 和 `ctx` 由调用方提供。禁用重试可减少本包自动重试循环产生的重复收费风险，但不保证请求只发送一次：底层 HTTP 传输仍可能透明重发，是否重复计费取决于上游幂等和计费协议。
 
 | 构造函数 | 凭据键 | 端点选择 |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ results, err := engine.Search(ctx, engine.ConvertQuery("example.com"), 100)
 | `NewQuakeEngine` | `quake_key` | 内置 Quake 服务搜索 API |
 | `NewQuakeEngineAt` | `quake_key` | 调用方指定端点 |
 
-每次搜索重新读取凭据、去除首尾空白并发送给数据源。读取器为 nil、读取失败或键值为空时返回 `ErrEngineNotConfigured`，不传播原始凭据读取错误。本包不解密、保存或供应凭据。覆盖端点时必须信任该端点，因为凭据会发送到所选地址。并发调用须提供并发安全的凭据读取器和 HTTP 客户端。
+每次搜索开始时读取一次所需凭据、去除首尾空白，同一次搜索的所有分页使用该凭据快照；下次搜索重新读取以支持轮换。读取器为 nil 或必需键值去除空白后为空时返回 `ErrEngineNotConfigured`。缺失键应返回空值与 nil 错误；读取失败（包括取消、权限或解密错误）通过 `%w` 传播，可用 `errors.Is` 判断原始原因，不再伪装成未配置。FOFA 可选 `fofa_email` 缺失可省略，但其读取失败同样在发起任何请求前返回错误。本包不解密、保存或供应凭据。覆盖端点时必须信任该端点，因为凭据会发送到所选地址。并发调用须提供并发安全的凭据读取器和 HTTP 客户端。
 
 ## 查询与结果语义
 
@@ -36,4 +36,4 @@ results, err := engine.Search(ctx, engine.ConvertQuery("example.com"), 100)
 
 适配器依赖上游响应格式、访问权限、配额和查询语法；不验证账号权益，也不保证本地限流值符合订阅限制。未宣称通过真实付费服务验收。
 
-本包当前没有包内测试文件；`go test ./mapping` 仅检查编译，不代表协议覆盖。修改分页或响应映射前应补充本地夹具测试；真实服务检查须取得明确授权并提供凭据。
+运行 `go test ./mapping` 和 `go test -race ./mapping`。现有测试使用内存凭据读取器和 HTTP 客户端夹具，覆盖凭据缺失、读取失败、可选 email、分页凭据快照与轮换，不访问真实 API；不代表所有上游协议或响应映射均有覆盖。真实服务检查须取得明确授权并提供凭据。

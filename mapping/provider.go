@@ -3,6 +3,7 @@ package mapping
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -35,18 +36,19 @@ type Engine interface {
 }
 
 // SecretReader 由调用方提供，按键返回明文凭据；存储与解密由调用方负责。
+// 缺失凭据应返回空值和 nil 错误；非 nil 错误作为读取失败传播。
 type SecretReader interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 }
 
-// readKey 读取指定 secret key 的明文；未配置时返回空串。
-func readKey(ctx context.Context, secrets SecretReader, key string) string {
+// readKey 读取指定 secret key 的明文；未配置时返回空串，读取失败保留错误链。
+func readKey(ctx context.Context, secrets SecretReader, key string) (string, error) {
 	if secrets == nil {
-		return ""
+		return "", nil
 	}
 	raw, err := secrets.Get(ctx, key)
-	if err != nil || len(raw) == 0 {
-		return ""
+	if err != nil {
+		return "", fmt.Errorf("mapping: read credential %s: %w", key, err)
 	}
-	return strings.TrimSpace(string(raw))
+	return strings.TrimSpace(string(raw)), nil
 }

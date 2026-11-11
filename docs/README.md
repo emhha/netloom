@@ -23,6 +23,8 @@
 - [安全使用](../SAFETY.md)：TLS、代理、凭据、MITM 和目标授权边界。
 - [验证记录](VALIDATION.md)：实际运行结果与未验证范围。
 - [性能记录](PERFORMANCE.md)：原生指纹的可复现测量。
+- [Serialization 性能](PERFORMANCE-serialization.md)：共享 Cloudflare AC 接入后的完整插件与文本分层测量。
+- [AC 库选型](AC-SELECTION.md)：信息提取/序列化预筛选的语义、并发、内存和实测比较。
 
 ## 包与资源
 
@@ -30,6 +32,9 @@
 - [测绘数据源](../mapping/README.md)：FOFA、Hunter、Quake 适配与凭据接口。
 - [企业信息](../enterprise/README.md)：企业数据源接口与 Aiqicha 适配。
 - [GeoIP](../geoip/README.md)：本地 MMDB/CDN 资源与显式更新。
+- [共享 AC 匹配](../ac/README.md)：独立字节串匹配引擎与关键词索引回调。
+- [信息提取](../infoextract/README.md)：独立调用、触发词/正则与 Information 插件。
+- [内置被动插件](../passive/plugins/README.md)：显式注册、Serialization 的解码预算和结果边界。
 - [指纹规则](../fingerprint/rules/README.md)：来源、配置和支持范围。
 - [目录字典](../dirscan/wordlists/README.md)：固定快照、校验和更新。
 

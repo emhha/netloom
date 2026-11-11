@@ -1,0 +1,4 @@
+=== RUN   TestVariedEquivalence
+--- PASS: TestVariedEquivalence (0.38s)
+PASS
+ok  	ac-evaluation	1.400s

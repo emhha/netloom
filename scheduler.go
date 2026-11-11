@@ -3,6 +3,7 @@ package netloom
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"sync"
@@ -158,6 +159,31 @@ func (s *scheduler) drainOnCancel() {
 }
 
 func (s *scheduler) process(ctx context.Context, t Task) {
+	if len(t.Mutators) > 0 {
+		t.Req = cloneRequest(t.Req)
+		for i, m := range t.Mutators {
+			err := requestContextError(ctx)
+			if err == nil {
+				if m == nil {
+					err = fmt.Errorf("nil mutator")
+				} else {
+					err = m.Mutate(t.Req)
+				}
+			}
+			if err != nil {
+				c := NewContext(ctx, t.Req, t.Pipeline, nil)
+				c.Resp = &Response{Scheme: schemeOf(t.Req.URL), Error: fmt.Errorf("netloom.Task.Mutators[%d]: %w", i, err)}
+				s.deliver(&Result{Ctx: c})
+				return
+			}
+		}
+	}
+	if err := validateProxy(t.Req); err != nil {
+		c := NewContext(ctx, t.Req, t.Pipeline, nil)
+		c.Resp = &Response{Scheme: schemeOf(t.Req.URL), Error: err}
+		s.deliver(&Result{Ctx: c})
+		return
+	}
 	host := hostKey(t.Req.URL)
 
 	s.mu.Lock()
@@ -187,7 +213,9 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 
 	resp, err := s.sendWithRetry(ctx, t.Req)
 	if err != nil {
-		s.recordHostError(host)
+		if !errors.Is(err, ErrInvalidProxy) {
+			s.recordHostError(host)
+		}
 		// Surface the failed Context to consumers with the error attached.
 		c := NewContext(ctx, t.Req, t.Pipeline, nil)
 		if resp == nil {
@@ -212,6 +240,9 @@ func (s *scheduler) process(ctx context.Context, t Task) {
 }
 
 func (s *scheduler) sendWithRetry(ctx context.Context, req *Request) (*Response, error) {
+	if err := validateProxy(req); err != nil {
+		return nil, err
+	}
 	request := *req
 	request.Network = req.Network.Clone()
 	request.TLSConfig = req.TLSConfig.Clone()
@@ -348,7 +379,9 @@ func (s *scheduler) recordHostError(host string) {
 func (s *scheduler) resetHostError(host string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.hostErrorCount[host] = 0
+	// Successful hosts need no history. Skip decisions remain sticky for this
+	// Run even if a request that was already in flight later succeeds.
+	delete(s.hostErrorCount, host)
 }
 
 // wait blocks until all submitted tasks (and their derived tasks) complete,
@@ -368,6 +401,13 @@ func (s *scheduler) shutdown() {
 	s.closeOnce.Do(func() {
 		close(s.closed)
 		s.workers.Wait()
+		// Error/skip history is run-scoped, not Engine-global. Preserve exact
+		// decisions until all workers exit, then release it even if callers
+		// retain a completed scheduler through a diagnostic reference.
+		s.mu.Lock()
+		s.hostErrorCount = nil
+		s.skipped = nil
+		s.mu.Unlock()
 		if s.onDone != nil {
 			s.onDone()
 		}

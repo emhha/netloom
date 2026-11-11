@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -14,11 +15,16 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 )
 
-// scanner is the orchestrator that owns the directories queue and drives the
-// netloom engine through the scan lifecycle. It maps to dirsearch's Controller.
+// scanEngine is the request surface used by bounded scan workers.
+type scanEngine interface {
+	Send(context.Context, *netloom.Request) (*netloom.Response, error)
+	Close() error
+}
+
+// scanner owns scan state; only its coordinator aggregates worker responses.
 type scanner struct {
 	cfg     *Config
-	engine  *netloom.Engine
+	engine  scanEngine
 	filter  *filterChain
 	baseURL *url.URL
 
@@ -58,10 +64,11 @@ func newScanner(cfg *Config) (*scanner, error) {
 	}
 
 	eng, err := netloom.New(netloom.Config{
-		Threads:       threads,
-		Timeout:       timeout,
-		Retries:       1,
-		MaxHostErrors: cfg.MaxConsecutiveErrors,
+		Threads:              threads,
+		MaxConcurrentPerHost: threads,
+		Timeout:              timeout,
+		Retries:              1,
+		MaxHostErrors:        cfg.MaxConsecutiveErrors,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dirscan.newScanner: create engine: %w", err)
@@ -85,24 +92,31 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 		defer cancel()
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := s.prepareScan(ctx); err != nil {
 		return nil, fmt.Errorf("dirscan.scanner.run: prepare scan: %w", err)
 	}
+	return s.scan(ctx)
+}
 
+// scan drives the prepared engine and preserves completed results on cancellation.
+func (s *scanner) scan(ctx context.Context) ([]Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Build the wordlist.
 	wordlist, err := BuildWordlist(s.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("dirscan.scanner.run: %w", err)
 	}
 	if len(wordlist) == 0 {
-		return nil, nil
+		return nil, ctx.Err()
 	}
 
 	// Initial directory queue: start with the BaseURL path.
-	startPath := s.baseURL.Path
-	if !strings.HasSuffix(startPath, "/") {
-		startPath += "/"
-	}
+	startPath := s.scanRoot()
 	directories := []string{startPath}
 
 	s.mu.Lock()
@@ -135,52 +149,19 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 			wp = s.buildWildcardProfile(ctx, dir, threshold)
 		}
 
-		// Collect _items for this directory.
-		items := make([]string, len(wordlist))
-		copy(items, wordlist)
-
-		// _extra queue: paths discovered by crawl (consumed first).
-		extra := make([]string, 0)
 		extraSet := make(map[string]bool)
-
-		// Process _extra then _items.
-		for {
-			var path string
-			if len(extra) > 0 {
-				path = extra[0]
-				extra = extra[1:]
-			} else if len(items) > 0 {
-				path = items[0]
-				items = items[1:]
-			} else {
-				break
-			}
-
-			if ctx.Err() != nil {
-				break
-			}
-
-			maxErr := s.cfg.MaxConsecutiveErrors
-			if maxErr <= 0 {
-				maxErr = 8
-			}
-			if s.consecErrs >= maxErr {
-				break
-			}
-
-			fullURL := joinURL(s.cfg.BaseURL, dir, path)
-
-			resp, err := s.engine.Send(ctx, s.buildRequest(fullURL))
-			if err != nil {
+		maxErr := s.cfg.MaxConsecutiveErrors
+		if maxErr <= 0 {
+			maxErr = 8
+		}
+		s.scanDirectory(ctx, dir, wordlist, func(reply scanReply) ([]string, bool) {
+			resp := reply.resp
+			if reply.err != nil || resp == nil || resp.Error != nil {
 				s.consecErrs++
-				continue
+				return nil, s.consecErrs < maxErr
 			}
 			s.consecErrs = 0
-
-			if resp.Error != nil {
-				s.consecErrs++
-				continue
-			}
+			requestDir, path, fullURL := reply.job.requestDir, reply.job.path, reply.job.url
 
 			// Classify against wildcard profile.
 			classification := "unique"
@@ -188,12 +169,17 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 				classification = wp.Classify(path, resp)
 			}
 			if classification == "wildcard" {
-				continue
+				return nil, true
 			}
+
+			// Populate derived fields before MatchWords/Lines and FilterWords/Lines.
+			words, lines := countWordsLines(resp.Body)
+			resp.WordCount = words
+			resp.LineCount = lines
 
 			// Apply filter chain.
 			if !s.filter.Keep(resp) {
-				continue
+				return nil, true
 			}
 
 			// Response body dedup.
@@ -201,18 +187,13 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 			s.mu.Lock()
 			if s.bodyHashes[bh] {
 				s.mu.Unlock()
-				continue
+				return nil, true
 			}
 			s.bodyHashes[bh] = true
 			s.mu.Unlock()
 
-			// Count words and lines for Matcher/Filter.
-			words, lines := countWordsLines(resp.Body)
-			resp.WordCount = words
-			resp.LineCount = lines
-
 			// Categorise and report the result.
-			relPath := relativePath(dir, path)
+			relPath := relativePath(requestDir, path)
 			cat := categorizeResult(relPath)
 			result := Result{
 				URL:           fullURL,
@@ -231,37 +212,45 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 			s.results = append(s.results, result)
 			s.mu.Unlock()
 
-			// Crawl: extract links from response.
+			// Crawl: prioritize discoveries over dictionary jobs not yet sent.
+			var extra []string
 			if s.cfg.Crawl {
 				links := ExtractLinks(resp, fullURL)
 				for _, link := range links {
+					linkURL, err := url.Parse(link)
+					if err != nil || !s.withinScanRoot(linkURL.Path) {
+						continue
+					}
+					if strings.HasSuffix(linkURL.Path, "/") && !s.directoryAllowed(linkURL.Path) {
+						continue
+					}
 					if !extraSet[link] {
 						extraSet[link] = true
 						extra = append(extra, link)
 					}
 					// Also recurse if it looks like a directory.
-					if strings.HasSuffix(link, "/") {
-						newDir := joinDirPath(dir, link)
-						directories = s.addDirectory(directories, newDir, dir)
+					if strings.HasSuffix(linkURL.Path, "/") {
+						directories = s.addDirectory(directories, linkURL.Path)
 					}
 				}
 			}
 
 			// Recursion decision.
 			if s.cfg.Recursive || s.cfg.DeepRecursive || s.cfg.ForceRecursive {
-				newDirs := s.recursionDirs(dir, path, resp)
+				newDirs := s.recursionDirs(requestDir, path, resp)
 				for _, nd := range newDirs {
-					directories = s.addDirectory(directories, nd, dir)
+					directories = s.addDirectory(directories, nd)
 				}
 			}
-		}
+			return extra, true
+		})
 	}
 
 	s.mu.Lock()
 	out := make([]Result, len(s.results))
 	copy(out, s.results)
 	s.mu.Unlock()
-	return out, nil
+	return out, ctx.Err()
 }
 
 // buildWildcardProfile sends two random stealth requests to establish the
@@ -269,10 +258,13 @@ func (s *scanner) run(ctx context.Context) ([]Result, error) {
 func (s *scanner) buildWildcardProfile(ctx context.Context, dir string, threshold int) *WildcardProfile {
 	var baselines [2]*netloom.Response
 	for i := 0; i < 2; i++ {
+		if ctx.Err() != nil {
+			break
+		}
 		probe := randomStealth()
 		fullURL := joinURL(s.cfg.BaseURL, dir, probe)
 		resp, err := s.engine.Send(ctx, s.buildRequest(fullURL))
-		if err != nil || resp.Error != nil {
+		if err != nil || resp == nil || resp.Error != nil {
 			return &WildcardProfile{
 				FingerprintCounts: make(map[string]int),
 				Threshold:         threshold,
@@ -378,18 +370,14 @@ func (s *scanner) recursionDirs(baseDir, path string, resp *netloom.Response) []
 // 1. Not in exclude-subdirs blacklist.
 // 2. Within recursion depth.
 // 3. Not already visited.
-func (s *scanner) addDirectory(queue []string, newDir, baseDir string) []string {
+func (s *scanner) addDirectory(queue []string, newDir string) []string {
+	if !s.directoryAllowed(newDir) {
+		return queue
+	}
+
 	// 1. Exclude-subdirs blacklist.
 	for _, excl := range s.cfg.ExcludeSubdirs {
 		if strings.Contains(newDir, excl) {
-			return queue
-		}
-	}
-
-	// 2. Recursion depth.
-	if s.cfg.RecursionDepth > 0 {
-		depth := depthOf(newDir, baseDir)
-		if depth > s.cfg.RecursionDepth {
 			return queue
 		}
 	}
@@ -402,6 +390,22 @@ func (s *scanner) addDirectory(queue []string, newDir, baseDir string) []string 
 	}
 	s.passedURLs[newDir] = true
 	return append(queue, newDir)
+}
+
+// scanRoot is fixed for the scan; recursive parents must never reset depth.
+func (s *scanner) scanRoot() string {
+	return strings.TrimSuffix(path.Clean("/"+s.baseURL.Path), "/") + "/"
+}
+
+func (s *scanner) withinScanRoot(candidate string) bool {
+	root := s.scanRoot()
+	clean := path.Clean("/" + candidate)
+	return clean == strings.TrimSuffix(root, "/") || strings.HasPrefix(clean, root)
+}
+
+func (s *scanner) directoryAllowed(candidate string) bool {
+	return s.withinScanRoot(candidate) && (s.cfg.RecursionDepth <= 0 ||
+		depthOf(strings.TrimSuffix(path.Clean(candidate), "/")+"/", s.scanRoot()) <= s.cfg.RecursionDepth)
 }
 
 // depthOf returns the number of path segments that newDir adds relative to baseDir.
@@ -483,10 +487,11 @@ func (s *scanner) prepareScan(ctx context.Context) error {
 	}
 
 	eng, err := netloom.New(netloom.Config{
-		Threads:       s.cfg.Threads,
-		Timeout:       effectiveTimeout(s.cfg.Timeout),
-		Retries:       1,
-		MaxHostErrors: s.cfg.MaxConsecutiveErrors,
+		Threads:              s.cfg.Threads,
+		MaxConcurrentPerHost: s.cfg.Threads,
+		Timeout:              effectiveTimeout(s.cfg.Timeout),
+		Retries:              1,
+		MaxHostErrors:        s.cfg.MaxConsecutiveErrors,
 	})
 	if err != nil {
 		return fmt.Errorf("dirscan.prepareScan: create engine: %w", err)

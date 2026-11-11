@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"mime"
 	"sync"
 
@@ -14,27 +15,23 @@ import (
 )
 
 type Information struct {
-	Extractor  *infoextract.InfoExtractor
-	CacheLimit int
-	once       sync.Once
-	cache      *passive.Registry
-	cacheErr   error
+	Extractor     *infoextract.InfoExtractor
+	CacheLimit    int
+	mu            sync.Mutex
+	cache         *passive.Registry
+	cacheIdentity uint64
 }
 
 func (p *Information) Metadata() passive.Metadata {
-	return passive.Metadata{ID: "infoextract", Version: "3", Description: "正文按项目/会话/URL/内容去重，响应头独立提取敏感信息候选"}
+	return passive.Metadata{ID: "infoextract", Version: "4", Description: "正文按项目/会话/URL/内容去重，响应头独立提取敏感信息候选"}
 }
 func (p *Information) CacheKey(passive.Input) string { return "" }
 func (p *Information) Analyze(ctx context.Context, in passive.Input) (passive.Result, error) {
-	p.once.Do(func() {
-		p.cache, p.cacheErr = passive.New([]passive.Plugin{
-			informationPart{Extractor: p.Extractor}, informationPart{Extractor: p.Extractor, Headers: true},
-		}, informationCacheLimit(p.CacheLimit))
-	})
-	if p.cacheErr != nil {
-		return passive.Result{}, p.cacheErr
+	cache, err := p.registry()
+	if err != nil {
+		return passive.Result{}, err
 	}
-	parts, err := p.cache.Analyze(ctx, in, []string{"infoextract_body", "infoextract_headers"})
+	parts, err := cache.Analyze(ctx, in, []string{"infoextract_body", "infoextract_headers"})
 	if err != nil {
 		return passive.Result{}, err
 	}
@@ -54,9 +51,33 @@ func (p *Information) Analyze(ctx context.Context, in passive.Input) (passive.Re
 	return result, err
 }
 
+// registry pins both cache-key computation and body/header execution to one
+// immutable ruleset. Reading a live generation only in CacheKey would allow an
+// AddRule between CacheKey and Analyze to cache new results under an old key.
+func (p *Information) registry() (*passive.Registry, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.Extractor == nil {
+		return nil, fmt.Errorf("plugins.Information: extractor is required")
+	}
+	snapshot := p.Extractor.Snapshot()
+	if p.cache == nil || p.cacheIdentity != snapshot.Identity() {
+		cache, err := passive.New([]passive.Plugin{
+			informationPart{Snapshot: snapshot}, informationPart{Snapshot: snapshot, Headers: true},
+		}, informationCacheLimit(p.CacheLimit))
+		if err != nil {
+			return nil, err
+		}
+		p.cache, p.cacheIdentity = cache, snapshot.Identity()
+	}
+	// Older in-flight calls retain their own registry. A generation change
+	// drops our reference rather than mutating plugins used by those calls.
+	return p.cache, nil
+}
+
 type informationPart struct {
-	Extractor *infoextract.InfoExtractor
-	Headers   bool
+	Snapshot infoextract.Snapshot
+	Headers  bool
 }
 
 func (p informationPart) Metadata() passive.Metadata {
@@ -87,7 +108,7 @@ func (p informationPart) Analyze(ctx context.Context, in passive.Input) (passive
 	if p.Headers {
 		body, headers = nil, in.Response.Header
 	}
-	findings := p.Extractor.ExtractWithContentType(body, headers, in.Response.ContentType)
+	findings := p.Snapshot.ExtractWithContentType(body, headers, in.Response.ContentType)
 	result := passive.Result{}
 	ct, _, _ := mime.ParseMediaType(in.Response.ContentType)
 	if !p.Headers && (ct == "application/javascript" || ct == "text/javascript") && len(body) > 100*1024 {

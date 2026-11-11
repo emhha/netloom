@@ -4,55 +4,10 @@ import (
 	"crypto/md5" //nolint:gosec // md5 used for body dedup hash, not security
 	"encoding/hex"
 	"fmt"
-	"github.com/emhha/netloom"
 	"strings"
 
-	http "github.com/bogdanfinn/fhttp"
+	"github.com/emhha/netloom"
 )
-
-// headerMutator adds the configured User-Agent and any custom headers to
-// every request before it is dispatched by the Transport.
-type headerMutator struct {
-	userAgent     string
-	customHeaders map[string]string
-}
-
-func (m *headerMutator) Mutate(req *netloom.Request) error {
-	if req.Header == nil {
-		req.Header = make(http.Header)
-	}
-	if m.userAgent != "" {
-		req.Header.Set("User-Agent", m.userAgent)
-	}
-	for k, v := range m.customHeaders {
-		req.Header.Set(k, v)
-	}
-	return nil
-}
-
-// proxyMutator sets the proxy on the request when a ProxyURL is configured.
-type proxyMutator struct {
-	proxyURL string
-}
-
-func (m *proxyMutator) Mutate(req *netloom.Request) error {
-	if m.proxyURL != "" {
-		req.Proxy = m.proxyURL
-	}
-	return nil
-}
-
-// tlsProfileMutator applies the browser TLS fingerprint profile to the request.
-// Certificate verification is handled unconditionally by the netloom transport
-// (scanning always skips verify), so only the profile name is carried here.
-type tlsProfileMutator struct {
-	profileName string
-}
-
-func (m *tlsProfileMutator) Mutate(req *netloom.Request) error {
-	req.Profile = netloom.ProfileByName(m.profileName)
-	return nil
-}
 
 // certExtractor implements netloom.Extractor. It surfaces TLS certificate
 // information already captured by the Transport as a structured Artifact so
@@ -122,25 +77,12 @@ func extractTitle(body []byte) string {
 	return strings.Join(fields, " ")
 }
 
-// buildPipeline constructs the ordered handler slice for a probe request.
-// Request-side mutators run first (priority 10→30), then response-side
-// extractors run after the Transport returns (via AsExtractor wrapping).
-func buildPipeline(cfg *Config) []netloom.Handler {
-	// Request-side: ProxyMutator → HeaderMutator → TLSProfileMutator
-	proxy := netloom.AsMutator(&proxyMutator{proxyURL: cfg.ProxyURL})
-	header := netloom.AsMutator(&headerMutator{
-		userAgent:     defaultUserAgent(),
-		customHeaders: cfg.CustomHeaders,
-	})
-	tls := netloom.AsMutator(&tlsProfileMutator{
-		profileName: cfg.TLSProfile,
-	})
-
-	// Response-side: CertExtractor → HTMLExtractor (soft404 is applied outside pipeline)
+// buildPipeline constructs response-only analysis. Request options are applied
+// by buildRequest before Do sends the first request or follows redirects.
+func buildPipeline(_ *Config) []netloom.Handler {
 	cert := netloom.AsExtractor(certExtractor{})
 	html := netloom.AsExtractor(htmlExtractor{})
-
-	return []netloom.Handler{proxy, header, tls, cert, html}
+	return []netloom.Handler{cert, html}
 }
 
 // defaultUserAgent returns the default User-Agent header value for probe requests.

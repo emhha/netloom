@@ -232,11 +232,10 @@ func buildRequest(rawURL string, cfg *Config) *netloom.Request {
 		Proxy:     cfg.ProxyURL,
 		VerifyTLS: !cfg.SkipVerify,
 	}
-	if len(cfg.CustomHeaders) > 0 {
-		req.Header = make(http.Header, len(cfg.CustomHeaders))
-		for k, v := range cfg.CustomHeaders {
-			req.Header[k] = []string{v}
-		}
+	req.Header = make(http.Header, len(cfg.CustomHeaders)+1)
+	req.Header.Set("User-Agent", defaultUserAgent())
+	for k, v := range cfg.CustomHeaders {
+		req.Header.Set(k, v)
 	}
 	return req
 }

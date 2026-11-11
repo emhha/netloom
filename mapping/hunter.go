@@ -33,7 +33,10 @@ func (e *HunterEngine) ConvertQuery(query string) string {
 	return "domain=" + strconv.Quote(query)
 }
 func (e *HunterEngine) Search(ctx context.Context, query string, limit int) ([]Result, error) {
-	key := readKey(ctx, e.secrets, "hunter_key")
+	key, err := readKey(ctx, e.secrets, "hunter_key")
+	if err != nil {
+		return nil, err
+	}
 	if key == "" {
 		return nil, ErrEngineNotConfigured
 	}

@@ -1,8 +1,9 @@
 // Package dirscan provides a high-performance directory scanner built on top of
 // the netloom engine. It replicates dirsearch's core logic — wildcard/soft-404
 // auto-calibration, dual-queue (_items/_extra), crawl, and recursive directory
-// scanning — while running entirely on the netloom Scheduler for concurrency,
-// rate-limiting, and SSRF protection.
+// scanning — using bounded workers over netloom Engine.Send for concurrency,
+// rate-limiting, and SSRF protection. A single coordinator aggregates responses
+// in dispatch order; recursive directories are processed one at a time.
 //
 // Zero business dependencies: no scope validation, no DB access, no audit log.
 // All of those concerns live in the service layer above.
@@ -66,7 +67,9 @@ type Config struct {
 	Wordlist []string
 	// Extensions appended during extension-fuzz (default ["php","html","asp","jsp"]).
 	Extensions []string
-	// Threads controls netloom concurrency (default 30; SmartSkip lowers to 20).
+	// Threads caps in-flight plus completed-but-not-aggregated requests per
+	// directory (default 30). The Engine's per-host cap is set to the same value.
+	// Auto mode may lower it. Set 1 for serial dispatch; rate limits still apply.
 	Threads int
 	// Timeout is the per-request deadline (default 10s).
 	Timeout time.Duration
@@ -116,7 +119,8 @@ type Config struct {
 	DeepRecursive bool
 	// ForceRecursive appends "/" to any discovered path to force directory recursion.
 	ForceRecursive bool
-	// RecursionDepth caps the recursion depth (0 = unlimited).
+	// RecursionDepth caps directory recursion relative to the fixed BaseURL path
+	// (0 = unlimited), including directories discovered by Crawl.
 	RecursionDepth int
 	// RecursionStatus lists status codes that trigger recursion (e.g. [200,301]).
 	// Empty means any 2xx triggers recursion.
@@ -165,9 +169,12 @@ type Config struct {
 	// --- Error recovery ---
 
 	// MaxConsecutiveErrors is the number of consecutive request errors per
-	// directory before scanning that directory is abandoned (default 8).
+	// directory before admission stops (default 8), counted in dispatch order.
+	// In-flight requests are canceled and drained; completed successes still pass
+	// through filtering/dedup. Up to Threads-1 later jobs may already be admitted.
 	MaxConsecutiveErrors int
-	// MaxTime is an overall scan deadline applied to the context.
+	// MaxTime is an overall scan deadline applied to the context. On expiry,
+	// Run returns completed results together with context.DeadlineExceeded.
 	MaxTime time.Duration
 	// TargetMaxTime is a per-directory deadline (unused placeholder for now).
 	TargetMaxTime time.Duration
@@ -201,7 +208,12 @@ type Result struct {
 
 // Run executes the directory scan described by cfg and returns all discovered
 // results. The caller is responsible for scope validation before calling Run.
-// ctx cancellation propagates to all in-flight requests.
+// ctx cancellation propagates to all in-flight requests. Cancellation or MaxTime
+// expiry returns completed results together with the scan context's Err; callers
+// must not interpret partial results as a completed scan. Run waits for admitted
+// requests to exit before returning. Results are aggregated in dispatch order,
+// not response completion order; concurrent Crawl may change the dispatch order.
+// The caller must not mutate cfg or its maps/slices while Run is active.
 func Run(ctx context.Context, cfg *Config) ([]Result, error) {
 	s, err := newScanner(cfg)
 	if err != nil {

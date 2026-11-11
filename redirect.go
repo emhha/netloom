@@ -213,6 +213,10 @@ func cloneRequest(request *Request) *Request {
 	copy.TLSConfig = request.TLSConfig.Clone()
 	copy.Auth = request.Auth.Clone()
 	copy.RetryPolicy = request.RetryPolicy.Clone()
+	if request.PhaseTimeouts != nil {
+		policy := *request.PhaseTimeouts
+		copy.PhaseTimeouts = &policy
+	}
 	return &copy
 }
 

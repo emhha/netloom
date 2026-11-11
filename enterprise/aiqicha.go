@@ -62,16 +62,20 @@ func NewAiqichaProvider(session enterpriseHTTPClient, secrets cookieReader) *Aiq
 func (p *AiqichaProvider) Name() string { return "aiqicha" }
 
 // cookie 从调用方的凭据读取接口取得 aiqicha_cookie 明文，查询时重新读取以支持轮换。
-// 未配置（secrets 为 nil、读取失败或值为空）时返回 ErrNotConfigured。
+// 未配置（secrets 为 nil 或值去除空白后为空）时返回 ErrNotConfigured；读取失败保留错误链。
 func (p *AiqichaProvider) cookie(ctx context.Context) (string, error) {
 	if p.secrets == nil {
 		return "", ErrNotConfigured
 	}
 	raw, err := p.secrets.Get(ctx, "aiqicha_cookie")
-	if err != nil || len(raw) == 0 {
+	if err != nil {
+		return "", fmt.Errorf("enterprise.aiqicha: read credential aiqicha_cookie: %w", err)
+	}
+	cookie := strings.TrimSpace(string(raw))
+	if cookie == "" {
 		return "", ErrNotConfigured
 	}
-	return strings.TrimSpace(string(raw)), nil
+	return cookie, nil
 }
 
 // headers 构造携带认证 Cookie 与 Referer 的请求头。

@@ -13,7 +13,28 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 不提供旧 module 路径的兼容包。安装方式见 [安装与使用](MIGRATION.md)。
 
+新增公共包 `github.com/emhha/netloom/ac`，提供 `ac.New([]string) *ac.Matcher`、`(*ac.Matcher).Search([]byte) map[string]struct{}` 与 `(*ac.Matcher).Match([]byte, func(index int))`。它薄适配固定版本 Cloudflare ahocorasick，统一使用线程安全扫描；空词忽略、重复词保留第一个原始下标。`Match` 每个命中唯一词每次最多回调一次，不保证顺序或 occurrence 次数，不是位置枚举接口。调用方可独立复用字节串匹配引擎，详见 [ac 说明](../ac/README.md)。`infoextract` 改为复用此包，原 `infoextract.New`、提取/注册规则接口及 `plugins.Information` 入口保留，无需改为通过 Registry 才能使用；见 [infoextract 说明](../infoextract/README.md)。
+
 ### 默认值与可见行为
+
+- **API 会话默认不重试具副作用方法**：`httpclient.Options.RetryMethods` 为 nil 仅允许 GET/HEAD/OPTIONS，非 nil 空列表不重试任何方法；构造时复制，按大写方法精确匹配。旧默认会重试 POST/PATCH 的调用方须重新确认业务可重入性，再显式加入列表，并保证正文可重放。一次性流即便方法获准也只发送一次；DisableRetries/负 RetryMax 仍优先，RetryMax 为 0 仍表示默认最多三次重试。根包 RetryPolicy 的显式 opt-in 语义不变。付费 GET 仍建议禁重试，此变化不提供 exactly-once 保证。
+- **凭据读取错误不再伪装成未配置**：mapping/enterprise 现在包装 SecretReader.Get 的非 nil 错误，可 errors.Is 判断底层取消、超时或存储故障；即使同时返回字节也不发送请求。只有 nil 读取器或无错误的空/空白必需值使用原有 ErrEngineNotConfigured/ErrNotConfigured。FOFA 的可选 fofa_email 读取故障同样失败，key/email 每次 Search 在分页前各读取一次；爱企查将纯空白 Cookie 视为未配置。此前统一捕获“未配置”的调用方应分别处理存储失败与配置缺失。
+
+- **代理配置失败关闭**：`httpclient.NewSession` 不再忽略无效代理后直连，保留构造函数签名，新增 `Session.Err()`；请求方法返回可 `errors.Is` 判断的 `ErrInvalidProxy`，不支持 scheme 仍可判断 `ErrUnsupportedProxy`。根包同步新增 `ErrInvalidProxy`，在最终请求变换后、准入前验证，错误不计入目标失败；配置错误不再回显代理地址/凭据。空字符串仍是直连，空白/缺少 scheme 或 host/无效端口/非根路径/query/fragment 改为明确拒绝；SOCKS 需显式端口。curl 不支持代理，未知选项错误不再回显整个原始 token。依赖旧隐式直连的调用方必须显式清空代理，而不是忽略错误。
+
+- 调度器现在先完成运行 context、worker 和种子 feeder 保活初始化，再对 `Submit` 发布；`Run` 与 `Close` 竞争时不再在关闭后发布新调度器，`Close` 等待 Run 的结果通道关闭。single-flight、非阻塞接纳及队满返回 false 的接口不变。主机并发槽在最后一个持有者/等待者离开时立即回收，成功主机删除零错误记录，Run 结束释放错误/跳过历史；错误阈值和 Run 内 sticky skip 不因回收而弱化。单次长 Run 的失败主机历史仍非固定容量，详见 [生命周期契约](API.md#调度与主机状态生命周期)。
+
+- `Task` 新增 `Mutators []Mutator`，按顺序在请求副本上执行一次，先于 host 配额选择、校验及重试；失败通过结果 `Response.Error` 返回，且不发送、不执行响应 Pipeline。`Task.Pipeline` 保持响应后分析；请把其中的 `AsMutator(m)` 移到 `Mutators: []Mutator{m}`。`AsMutator` 标记弃用，只保留独立发送前 Context 的兼容入口；已有 Response 时返回可用 `errors.Is` 判断的 `ErrMutatorAfterSend`，不再改写已发送请求。单次 `Send`/`Do` 在调用前显式变换。`probe` 在构造请求时设置默认 User-Agent，自定义 User-Agent 仍覆盖它，响应分析不再运行请求 mutator。详见 [API 契约](API.md)。
+
+- `infoextract` 新增 `Snapshot()`、`Snapshot.Identity()` 和快照的 `ExtractWithContentType`，规则、AC 索引和进程内唯一代次身份同时捕获；既有直接提取接口保留，并强化为一次调用的正文/响应头使用同一代规则。`plugins.Information` 按此身份替换内部缓存，成功 `AddRule` 后的新分析不再复用旧结果；在途旧分析仍可完成，但不会污染新代缓存。插件元数据版本从 `"3"` 升为 `"4"`；nil Extractor 改为返回明确错误。快照身份不是可持久化版本号；详见 [提取器说明](../infoextract/README.md) 和 [插件说明](../passive/plugins/README.md)。
+
+- `dirscan.RecursionDepth` 现在相对固定 `BaseURL` 扫描根计算，逐层递归不再重置深度；Crawl 的 origin-absolute 路径不再重复拼接当前目录，且不跟随扫描根外链接。取消或 `MaxTime` 到期返回已完成结果及非 nil context 错误，调用方应同时处理部分结果与错误。扫描改为每目录有界并发：`Threads` 默认 30，设置 1 可串行；Engine 同主机上限同步设为 Threads，实际请求压力可能高于旧串行版本，应根据目标授权和承载显式设置。目录和 wildcard 校准仍串行，Crawl 仅优先未派发字典。响应按派发顺序聚合，窗口包含未聚合的乱序完成响应；取消后等待在途退出并保留成功完成的过滤后结果。连续错误现在同时正确计入 `Response.Error` 和 nil 响应；阈值后停止该目录，最多已有 Threads-1 个后续任务被接纳，成功尾部响应不会重启派发。字数/行数过滤改为使用正文实际计数，可能修正过去零值导致的错误筛选。详见 [目录扫描](../dirscan/README.md)。
+
+- `infoextract.AddRule` 现在复制 `Triggers` 并以 copy-on-write 发布规则列表，修复并发同名替换对旧扫描快照的改写。返回后可复用原触发词切片；nil/零长度切片仍表示 fallback，只有空字符串的非空切片仍永不触发。不改变已有规则顺序、同名替换位置或独立提取入口。
+
+- `Serialization` 的文本规则改用共享 AC 筛选候选，仅候选运行正则，安全固定字面量规则直接命中；无法安全触发的规则保留正则 fallback。大小写不敏感的 `rememberMe` 仍走正则，保留 Unicode 折叠匹配，不能用仅 ASCII 的大小写预筛选替代。magic 仍为前缀检查，URL/Base64 流程、1 MiB/128/64 固定预算与结果/证据语义不变。Registry 不新增强制 AC 策略，既有插件选择、注册和缓存接口不变；共享引擎由各插件自行选择使用。
+
+- 新增公共插件 `passive/plugins.Serialization` 及结果类型 `plugins.SerializationFinding`；插件实现 `passive.Plugin`，零值可用；注册 ID 为 `serialization`、版本为 `"1"`。使用 `passive.New` 显式注册，不改变既有 Registry 的插件选择。它仅对已捕获请求 URL/头/正文和响应头/正文作离线特征扫描与一层有界解码，不反序列化、不联网；固定每输入总扫描 1 MiB、128 个观察面、64 个 findings，超限及 Response.BodyTruncated 传播至 Result.Truncated。Result.Data 新结构为 `{findings: [{format, rule, strength, scope, encoding, evidence}], passive_only: true}`，Artifacts 类型为 `serialization_hint`，仅含格式/强度及规则/位置元信息，不含原始敏感值。strong/medium/weak 是特征强度，不是漏洞结论；完整示例及误判边界见 [内置被动插件](../passive/plugins/README.md)。
 
 - `NetworkOptions` 新增 `LocalAddress`（JSON `local_address`）与 `Interface`（`interface`），分别绑定实际 TCP 源 IP 和 Linux 网卡；空值不改变原行为，适用于普通/流式/Raw 直连，与任意代理组合仍明确拒绝。源地址约束目标族，完整规范策略进入池身份；绑定不影响逻辑 URL/Host/SNI，不绑定 DNS resolver、不修改系统配置。新增可用 errors.Is 判断的 `ErrNetworkBindingInvalid`、`ErrNetworkBindingUnsupported`、`ErrNetworkBinding`：前两类在验证阶段返回，后者保留内核原因且不自动重试/降级。Interface 在非 Linux 即验证失败；Linux 可能需要调用方授予 capability。已有连接不因设备变化自动重绑，重新建连须 FreshConnection 或新 Engine；详情见 [绑定指南](NETWORK-BINDING.md)。
 

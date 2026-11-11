@@ -100,6 +100,44 @@ class RepositoryChecks(unittest.TestCase):
             self.assertTrue(any("root runtime must not import" in error for error in errors))
             self.assertTrue(any("neutral httpdata must not import" in error for error in errors))
 
+    def test_reviewed_private_proxy_helper_allowed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / "runtime.go").write_text(
+                f'package netloom\nimport "{checker.MODULE}/internal/proxyconfig"\n'
+            )
+            helper = root / "internal/proxyconfig/proxy.go"
+            helper.parent.mkdir(parents=True)
+            helper.write_text('package proxyconfig\nimport "net/url"\n')
+            self.assertEqual(checker.check(root), [])
+
+    def test_private_helper_exception_does_not_weaken_boundaries(self):
+        for imported in ("probe", "internal/unreviewed", "internal/proxyconfig/extension"):
+            with self.subTest(imported=imported), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.fixture(root)
+                (root / "runtime.go").write_text(
+                    f'package netloom\nimport "{checker.MODULE}/internal/proxyconfig"\n'
+                    f'import "{checker.MODULE}/{imported}"\n'
+                )
+                self.assertTrue(any("root runtime must not import" in error for error in checker.check(root)))
+        for imported in ("", "/probe", "/httpdata", "/internal/other"):
+            with self.subTest(helper_import=imported), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.fixture(root)
+                helper = root / "internal/proxyconfig/proxy.go"
+                helper.parent.mkdir(parents=True)
+                helper.write_text(f'package proxyconfig\nimport "{checker.MODULE}{imported}"\n')
+                self.assertTrue(any("shared proxy validation must not import" in error for error in checker.check(root)))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / "httpdata/types.go").write_text(
+                f'package httpdata\nimport "{checker.MODULE}/internal/proxyconfig"\n'
+            )
+            self.assertTrue(any("neutral httpdata must not import" in error for error in checker.check(root)))
+
     def test_missing_required_file_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

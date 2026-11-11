@@ -98,6 +98,13 @@ func (e *Engine) Run(ctx context.Context, seeds []Task) (<-chan *Result, error) 
 		return nil, err
 	}
 	e.mu.Lock()
+	// begin and publication are separate critical sections: Close may have
+	// started in between them. Never publish work after that transition.
+	if e.closed {
+		e.mu.Unlock()
+		release()
+		return nil, ErrEngineClosed
+	}
 	if e.sch != nil {
 		e.mu.Unlock()
 		release()
@@ -110,17 +117,16 @@ func (e *Engine) Run(ctx context.Context, seeds []Task) (<-chan *Result, error) 
 			e.sch = nil
 		}
 		e.mu.Unlock()
-		release()
 	}
+	// Initialize the context, worker WaitGroup and feeder lease before exposing
+	// the scheduler to Submit. Published runCtx is immutable for its lifetime.
+	sch.pending = 1
+	sch.start(ctx)
 	e.sch = sch
 	e.mu.Unlock()
 
-	sch.start(ctx)
 	// Keep the scheduler alive while a bounded feeder submits seeds. Returning
 	// the result channel first prevents producers and workers blocking each other.
-	sch.acceptMu.Lock()
-	sch.pending++
-	sch.acceptMu.Unlock()
 	go func() {
 		defer sch.finishTask()
 		for _, task := range seeds {
@@ -135,7 +141,11 @@ func (e *Engine) Run(ctx context.Context, seeds []Task) (<-chan *Result, error) 
 
 	// Close the scheduler once every task (and derivative) drains, then clear
 	// the active reference.
-	go sch.wait()
+	go func() {
+		// Close must not return before workers exit AND results is closed.
+		defer release()
+		sch.wait()
+	}()
 
 	return sch.results, nil
 }
@@ -173,6 +183,9 @@ func (e *Engine) Send(ctx context.Context, req *Request) (*Response, error) {
 		return nil, err
 	}
 	defer finish()
+	if err := validateProxy(req); err != nil {
+		return nil, err
+	}
 	release, err := e.acquireSend(ctx, req)
 	if err != nil {
 		return nil, err

@@ -20,10 +20,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/emhha/netloom/internal/proxyconfig"
 	"golang.org/x/net/proxy"
 )
 
@@ -32,7 +32,9 @@ var (
 	// ErrRetryExhausted is returned when all retry attempts failed.
 	ErrRetryExhausted = errors.New("httpclient: retry attempts exhausted")
 	// ErrUnsupportedProxy is returned when the proxy URL scheme is not handled.
-	ErrUnsupportedProxy = errors.New("httpclient: unsupported proxy scheme")
+	ErrUnsupportedProxy = proxyconfig.ErrUnsupported
+	// ErrInvalidProxy identifies a permanent local proxy configuration error.
+	ErrInvalidProxy = proxyconfig.ErrInvalid
 )
 
 const (
@@ -47,8 +49,12 @@ const (
 
 // Options configures a Session. Zero values fall back to package defaults.
 type Options struct {
-	Timeout            time.Duration
-	RetryMax           int
+	Timeout  time.Duration
+	RetryMax int
+	// RetryMethods is copied at construction. Nil selects GET/HEAD/OPTIONS;
+	// non-nil empty disables retries. Only uppercase HTTP tokens are accepted.
+	// Allowing POST or another non-default method is an explicit caller decision.
+	RetryMethods       []string
 	DisableRetries     bool
 	RetryWait          time.Duration
 	Proxy              string // "http://host:port" or "socks5://host:port"; empty disables
@@ -61,16 +67,16 @@ type Options struct {
 // Rate limiting is NOT held by the Session: it is delegated to a process-level
 // per-source registry so that multiple Sessions cannot exceed a source's rate.
 type Session struct {
-	client    *http.Client
-	retryMax  int
-	retryWait time.Duration
-	userAgent string
+	client       *http.Client
+	retryMax     int
+	retryMethods []string // immutable, privately owned allowlist
+	retryWait    time.Duration
+	userAgent    string
+	initErr      error // immutable after construction
 }
 
-// NewSession builds a Session from opts. An invalid proxy URL is logged and
-// ignored: the session falls back to a direct connection. The constructor has
-// no error return; callers requiring fail-closed proxy policy must validate
-// configuration before construction.
+// NewSession builds a Session from opts. Invalid proxy configuration is retained
+// by Err and all request methods fail closed without consuming rate tokens.
 func NewSession(opts Options) *Session {
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -84,6 +90,17 @@ func NewSession(opts Options) *Session {
 	}
 	if opts.DisableRetries {
 		retryMax = 0
+	}
+	retryMethods := []string{http.MethodGet, http.MethodHead, http.MethodOptions}
+	if opts.RetryMethods != nil {
+		// Preserve explicit empty (including an all-invalid list); never fall
+		// back to defaults after filtering invalid entries.
+		retryMethods = make([]string, 0, len(opts.RetryMethods))
+		for _, method := range opts.RetryMethods {
+			if validRetryMethod(method) {
+				retryMethods = append(retryMethods, method)
+			}
+		}
 	}
 	retryWait := opts.RetryWait
 	if retryWait <= 0 {
@@ -108,10 +125,7 @@ func NewSession(opts Options) *Session {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
-	if err := applyProxy(transport, opts.Proxy); err != nil {
-		slog.Warn("httpclient: proxy ignored",
-			slog.String("proxy", opts.Proxy), slog.String("error", err.Error()))
-	}
+	initErr := applyProxy(transport, opts.Proxy)
 
 	return &Session{
 		client: &http.Client{
@@ -119,9 +133,11 @@ func NewSession(opts Options) *Session {
 			Timeout:       timeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		retryMax:  retryMax,
-		retryWait: retryWait,
-		userAgent: ua,
+		retryMax:     retryMax,
+		retryMethods: retryMethods,
+		retryWait:    retryWait,
+		userAgent:    ua,
+		initErr:      initErr,
 	}
 }
 
@@ -131,9 +147,9 @@ func applyProxy(transport *http.Transport, raw string) error {
 	if raw == "" {
 		return nil
 	}
-	u, err := url.Parse(raw)
+	u, err := proxyconfig.Parse(raw, "http", "https", "socks5", "socks5h")
 	if err != nil {
-		return fmt.Errorf("httpclient.applyProxy: %w", err)
+		return err
 	}
 	switch u.Scheme {
 	case "http", "https":
@@ -147,18 +163,21 @@ func applyProxy(transport *http.Transport, raw string) error {
 		}
 		dialer, derr := proxy.SOCKS5("tcp", u.Host, auth, proxy.Direct)
 		if derr != nil {
-			return fmt.Errorf("httpclient.applyProxy: %w", derr)
+			return ErrInvalidProxy
 		}
 		ctxDialer, ok := dialer.(proxy.ContextDialer)
 		if !ok {
-			return fmt.Errorf("httpclient.applyProxy: socks5 dialer lacks context support")
+			return ErrInvalidProxy
 		}
 		transport.DialContext = ctxDialer.DialContext
 		return nil
 	default:
-		return fmt.Errorf("httpclient.applyProxy: %w: %q", ErrUnsupportedProxy, u.Scheme)
+		return fmt.Errorf("%w: %w", ErrInvalidProxy, ErrUnsupportedProxy)
 	}
 }
+
+// Err reports immutable initialization failure, allowing construction-time checks.
+func (s *Session) Err() error { return s.initErr }
 
 // Get performs a rate-limited, retrying GET against rawURL under the given
 // source's bucket. headers are sent verbatim (plaintext; credential-agnostic).
@@ -166,15 +185,16 @@ func (s *Session) Get(ctx context.Context, rawURL, source string, headers map[st
 	return s.do(ctx, http.MethodGet, rawURL, source, nil, headers)
 }
 
-// Post performs a rate-limited, retrying POST with the given body.
+// Post performs a rate-limited POST with the given replayable body.
+// Automatic retries require explicitly allowing POST in Options.RetryMethods.
 func (s *Session) Post(ctx context.Context, rawURL, source string, body []byte, headers map[string]string) (*http.Response, error) {
 	return s.do(ctx, http.MethodPost, rawURL, source, body, headers)
 }
 
 // Do sends an arbitrary caller-built request under source's rate limit and
-// retry policy. The request body, if any, must be rewindable across retries;
-// callers should set req.GetBody (http.NewRequestWithContext does this for
-// byte/string bodies). Provided for enterprise/mapping providers that need
+// retry policy. Retries require both an allowed method and a replayable body;
+// without req.GetBody a non-empty body is sent only once. NewRequestWithContext
+// sets GetBody for byte/string readers. Provided for enterprise/mapping providers that need
 // full control over method, URL and headers.
 func (s *Session) Do(ctx context.Context, source string, req *http.Request) (*http.Response, error) {
 	return s.execute(ctx, source, req, nil)
@@ -182,6 +202,9 @@ func (s *Session) Do(ctx context.Context, source string, req *http.Request) (*ht
 
 // do builds a request from primitives then delegates to execute.
 func (s *Session) do(ctx context.Context, method, rawURL, source string, body []byte, headers map[string]string) (*http.Response, error) {
+	if s.initErr != nil {
+		return nil, s.initErr
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -199,17 +222,26 @@ func (s *Session) do(ctx context.Context, method, rawURL, source string, body []
 // execute runs the rate-limit → send → retry loop. rawBody (may be nil) is used
 // to rebuild the request body on each retry when req.GetBody is unavailable.
 func (s *Session) execute(ctx context.Context, source string, req *http.Request, rawBody []byte) (*http.Response, error) {
+	if s.initErr != nil {
+		return nil, s.initErr
+	}
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", s.userAgent)
 	}
 
+	effectiveRetries := s.retryMax
+	if !s.retryMethodAllowed(req.Method) || (req.Body != nil && req.Body != http.NoBody && rawBody == nil && req.GetBody == nil) {
+		// Replayable bytes alone are not business-level permission to retry;
+		// conversely, an allowed method must never reuse a consumed reader.
+		effectiveRetries = 0
+	}
 	var lastErr error
 	// nextWait is the backoff before the next attempt; 429 overrides it with the
 	// server's Retry-After so the single wait at the top of the loop is correct
 	// for every retry reason (no double-waiting).
 	nextWait := s.retryWait
-	// attempts = 1 initial try + retryMax retries.
-	for attempt := 0; attempt <= s.retryMax; attempt++ {
+	// attempts = 1 initial try + effectiveRetries retries.
+	for attempt := 0; attempt <= effectiveRetries; attempt++ {
 		if attempt > 0 {
 			if err := sleepCtx(ctx, nextWait); err != nil {
 				return nil, err
@@ -240,7 +272,7 @@ func (s *Session) execute(ctx context.Context, source string, req *http.Request,
 
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests:
-			if attempt == s.retryMax {
+			if attempt == effectiveRetries {
 				return resp, nil
 			}
 			// Honor Retry-After (delta-seconds or HTTP-date) for the next wait.
@@ -249,7 +281,7 @@ func (s *Session) execute(ctx context.Context, source string, req *http.Request,
 			lastErr = fmt.Errorf("httpclient.execute: 429 from %s", source)
 			continue
 		case resp.StatusCode >= 500:
-			if attempt == s.retryMax {
+			if attempt == effectiveRetries {
 				return resp, nil
 			}
 			drainClose(resp)
@@ -265,6 +297,40 @@ func (s *Session) execute(ctx context.Context, source string, req *http.Request,
 		lastErr = ErrRetryExhausted
 	}
 	return nil, fmt.Errorf("httpclient.execute: %w: %w", ErrRetryExhausted, lastErr)
+}
+
+// retryMethodAllowed matches exactly, except that net/http treats an empty
+// request method as GET. In particular, lowercase methods are not normalized.
+func (s *Session) retryMethodAllowed(method string) bool {
+	if method == "" {
+		method = http.MethodGet
+	}
+	for _, allowed := range s.retryMethods {
+		if method == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// validRetryMethod accepts uppercase HTTP token characters. Invalid options are
+// ignored rather than broadening the retry policy or failing proxy initialization.
+func validRetryMethod(method string) bool {
+	if method == "" {
+		return false
+	}
+	for _, c := range method {
+		if c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+			continue
+		}
+		switch c {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // cloneRequest produces a fresh request for an attempt with a rewound body.

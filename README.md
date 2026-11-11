@@ -57,7 +57,8 @@ HTTP/HTTPS 请求可用 `HTTPVersion: "2"` 表示偏好 H2、允许 H1 降级，
 | --- | --- | --- |
 | 网络运行时 | 根包 `netloom` | HTTP/HTTPS、TLS 指纹、CA/mTLS、代理、Raw、流式请求、Cookie、重定向、Pipeline、调度与限流 |
 | 离线证据 | `httpdata`、`httpdata/netloomdata` | 标准库快照与运行时结果的显式复制 |
-| 离线分析 | `fingerprint`、`infoextract`、`passive` | 指纹、信息提取、被动分析与内置插件 |
+| 共享匹配 | [ac](ac/README.md) | 独立公共字节串 Aho-Corasick 引擎 |
+| 离线分析 | `fingerprint`、[infoextract](infoextract/README.md)、`passive` | 指纹、独立信息提取、被动分析与[内置插件](passive/plugins/README.md) |
 | 主动探测 | `probe`、`dirscan` | 探活、目录扫描 |
 | 网络工具 | `nethttp`、`mitm`、`geoip` | cURL 转换、MITM 原语、ASN/位置与 CDN/WAF/云识别 |
 | 数据源查询 | `httpclient`、`mapping`、`enterprise` | 独立 API 会话、测绘服务与企业信息适配 |

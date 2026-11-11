@@ -37,9 +37,16 @@ func (e *FofaEngine) ConvertQuery(query string) string {
 	return "domain=" + strconv.Quote(query)
 }
 func (e *FofaEngine) Search(ctx context.Context, query string, limit int) ([]Result, error) {
-	key := readKey(ctx, e.secrets, "fofa_key")
+	key, err := readKey(ctx, e.secrets, "fofa_key")
+	if err != nil {
+		return nil, err
+	}
 	if key == "" {
 		return nil, ErrEngineNotConfigured
+	}
+	email, err := readKey(ctx, e.secrets, "fofa_email")
+	if err != nil {
+		return nil, err
 	}
 	if limit <= 0 {
 		limit = 100
@@ -57,7 +64,7 @@ func (e *FofaEngine) Search(ctx context.Context, query string, limit int) ([]Res
 		}
 		q := u.Query()
 		q.Set("key", key)
-		if email := readKey(ctx, e.secrets, "fofa_email"); email != "" {
+		if email != "" {
 			q.Set("email", email)
 		}
 		q.Set("qbase64", base64.StdEncoding.EncodeToString([]byte(query)))

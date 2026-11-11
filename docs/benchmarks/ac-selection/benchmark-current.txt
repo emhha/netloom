@@ -1,0 +1,216 @@
+goos: linux
+goarch: amd64
+pkg: ac-evaluation
+cpu: AMD Ryzen 7 6800H with Radeon Graphics         
+BenchmarkScan/information/256KiB-nohit/Cloudflare-TS-4         	     256	    502213 ns/op	 521.98 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Cloudflare-TS-4         	     223	    497370 ns/op	 527.06 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Cloudflare-TS-4         	     258	    474064 ns/op	 552.97 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Bobu-Walk-4             	     189	    628181 ns/op	 417.31 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Bobu-Walk-4             	     195	    602565 ns/op	 435.05 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Bobu-Walk-4             	     195	    615001 ns/op	 426.25 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Petar-NFA-4             	      37	   3394866 ns/op	  77.22 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/256KiB-nohit/Petar-NFA-4             	      31	   3408986 ns/op	  76.90 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/256KiB-nohit/Petar-NFA-4             	      34	   3334628 ns/op	  78.61 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/256KiB-nohit/Petar-DFA-4             	      81	   1352073 ns/op	 193.88 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/256KiB-nohit/Petar-DFA-4             	     100	   1525206 ns/op	 171.87 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/256KiB-nohit/Petar-DFA-4             	      84	   1283105 ns/op	 204.30 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/256KiB-nohit/BytesContains-4         	      80	   1775015 ns/op	 147.69 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/BytesContains-4         	      67	   1517101 ns/op	 172.79 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/BytesContains-4         	      82	   1589484 ns/op	 164.92 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Cloudflare-TS-4           	   14580	      8084 ns/op	 506.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Cloudflare-TS-4           	   16221	      7520 ns/op	 544.71 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Cloudflare-TS-4           	   16263	      7334 ns/op	 558.52 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Bobu-Walk-4               	   12436	      9567 ns/op	 428.15 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Bobu-Walk-4               	   13094	      9181 ns/op	 446.15 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Bobu-Walk-4               	   12112	      9828 ns/op	 416.79 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Petar-NFA-4               	    2360	     50903 ns/op	  80.47 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/4KiB-nohit/Petar-NFA-4               	    2434	     50428 ns/op	  81.22 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/4KiB-nohit/Petar-NFA-4               	    2274	     53061 ns/op	  77.19 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/4KiB-nohit/Petar-DFA-4               	    6007	     24909 ns/op	 164.44 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/4KiB-nohit/Petar-DFA-4               	    4908	     25100 ns/op	 163.18 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/4KiB-nohit/Petar-DFA-4               	    4819	     23620 ns/op	 173.41 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/4KiB-nohit/BytesContains-4           	    5018	     24873 ns/op	 164.67 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/BytesContains-4           	    3894	     26742 ns/op	 153.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/BytesContains-4           	    4852	     24583 ns/op	 166.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Cloudflare-TS-4          	     452	    280682 ns/op	 233.49 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/information/64KiB-dense/Cloudflare-TS-4          	     381	    286985 ns/op	 228.36 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/information/64KiB-dense/Cloudflare-TS-4          	     522	    259870 ns/op	 252.19 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/information/64KiB-dense/Bobu-Walk-4              	     634	    188615 ns/op	 347.46 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Bobu-Walk-4              	     630	    190465 ns/op	 344.08 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Bobu-Walk-4              	     646	    190829 ns/op	 343.43 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Petar-NFA-4              	      80	   1274636 ns/op	  51.42 MB/s	  236049 B/op	    9832 allocs/op
+BenchmarkScan/information/64KiB-dense/Petar-NFA-4              	     106	   1115029 ns/op	  58.78 MB/s	  236048 B/op	    9832 allocs/op
+BenchmarkScan/information/64KiB-dense/Petar-NFA-4              	     104	   1331209 ns/op	  49.23 MB/s	  236049 B/op	    9832 allocs/op
+BenchmarkScan/information/64KiB-dense/Petar-DFA-4              	      61	   1722740 ns/op	  38.04 MB/s	  393344 B/op	   29494 allocs/op
+BenchmarkScan/information/64KiB-dense/Petar-DFA-4              	      79	   1562646 ns/op	  41.94 MB/s	  393345 B/op	   29494 allocs/op
+BenchmarkScan/information/64KiB-dense/Petar-DFA-4              	      98	   1583294 ns/op	  41.39 MB/s	  393345 B/op	   29494 allocs/op
+BenchmarkScan/information/64KiB-dense/BytesContains-4          	     235	    501799 ns/op	 130.60 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/BytesContains-4          	     253	    456501 ns/op	 143.56 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/BytesContains-4          	     249	    492524 ns/op	 133.06 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Cloudflare-TS-4          	    1036	    115569 ns/op	 567.07 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Cloudflare-TS-4          	    1105	    112573 ns/op	 582.16 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Cloudflare-TS-4          	     925	    119530 ns/op	 548.28 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Bobu-Walk-4              	     790	    153633 ns/op	 426.57 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Bobu-Walk-4              	     796	    152711 ns/op	 429.15 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Bobu-Walk-4              	     820	    146658 ns/op	 446.86 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Petar-NFA-4              	     145	    822748 ns/op	  79.65 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/64KiB-nohit/Petar-NFA-4              	     141	    840423 ns/op	  77.98 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/64KiB-nohit/Petar-NFA-4              	     146	    802985 ns/op	  81.62 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/information/64KiB-nohit/Petar-DFA-4              	     345	    333003 ns/op	 196.80 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/64KiB-nohit/Petar-DFA-4              	     344	    339242 ns/op	 193.18 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/64KiB-nohit/Petar-DFA-4              	     309	    359898 ns/op	 182.10 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/information/64KiB-nohit/BytesContains-4          	     331	    368047 ns/op	 178.06 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/BytesContains-4          	     327	    381567 ns/op	 171.75 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/BytesContains-4          	     307	    389927 ns/op	 168.07 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Cloudflare-TS-4         	    1250	    106738 ns/op	 613.99 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/information/64KiB-sparse/Cloudflare-TS-4         	    1220	    105819 ns/op	 619.32 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/information/64KiB-sparse/Cloudflare-TS-4         	    1060	    108402 ns/op	 604.56 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/information/64KiB-sparse/Bobu-Walk-4             	     692	    152049 ns/op	 431.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Bobu-Walk-4             	     756	    148574 ns/op	 441.10 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Bobu-Walk-4             	     772	    150761 ns/op	 434.70 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Petar-NFA-4             	     142	    834736 ns/op	  78.51 MB/s	     200 B/op	       5 allocs/op
+BenchmarkScan/information/64KiB-sparse/Petar-NFA-4             	     145	    819600 ns/op	  79.96 MB/s	     200 B/op	       5 allocs/op
+BenchmarkScan/information/64KiB-sparse/Petar-NFA-4             	     150	    800897 ns/op	  81.83 MB/s	     200 B/op	       5 allocs/op
+BenchmarkScan/information/64KiB-sparse/Petar-DFA-4             	     327	    339653 ns/op	 192.95 MB/s	     264 B/op	      13 allocs/op
+BenchmarkScan/information/64KiB-sparse/Petar-DFA-4             	     361	    349614 ns/op	 187.45 MB/s	     264 B/op	      13 allocs/op
+BenchmarkScan/information/64KiB-sparse/Petar-DFA-4             	     340	    364787 ns/op	 179.66 MB/s	     264 B/op	      13 allocs/op
+BenchmarkScan/information/64KiB-sparse/BytesContains-4         	     316	    343065 ns/op	 191.03 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/BytesContains-4         	     356	    355958 ns/op	 184.11 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/BytesContains-4         	     340	    348826 ns/op	 187.88 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Cloudflare-TS-4       	     224	    523901 ns/op	 500.37 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Cloudflare-TS-4       	     246	    505915 ns/op	 518.16 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Cloudflare-TS-4       	     216	    532421 ns/op	 492.36 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk-4           	     200	    588654 ns/op	 445.33 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk-4           	     198	    609084 ns/op	 430.39 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk-4           	     196	    612028 ns/op	 428.32 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Petar-NFA-4           	      36	   3357988 ns/op	  78.07 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Petar-NFA-4           	      36	   3366368 ns/op	  77.87 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Petar-NFA-4           	      31	   3394049 ns/op	  77.24 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Petar-DFA-4           	      81	   1457867 ns/op	 179.81 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Petar-DFA-4           	     100	   1471538 ns/op	 178.14 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Petar-DFA-4           	      98	   1303274 ns/op	 201.14 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/BytesContains-4       	      39	   3188798 ns/op	  82.21 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/BytesContains-4       	      36	   3373591 ns/op	  77.70 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/BytesContains-4       	      31	   3620250 ns/op	  72.41 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Cloudflare-TS-4         	   14388	      8689 ns/op	 471.42 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Cloudflare-TS-4         	   14968	      7973 ns/op	 513.75 MB/s	       1 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Cloudflare-TS-4         	   14436	      8207 ns/op	 499.06 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk-4             	   13108	      9195 ns/op	 445.46 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk-4             	   12972	      9296 ns/op	 440.63 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk-4             	   13224	      9100 ns/op	 450.12 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Petar-NFA-4             	    2432	     52285 ns/op	  78.34 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Petar-NFA-4             	    2040	     54651 ns/op	  74.95 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Petar-NFA-4             	    2418	     51863 ns/op	  78.98 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Petar-DFA-4             	    5442	     23900 ns/op	 171.38 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Petar-DFA-4             	    6388	     22992 ns/op	 178.15 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Petar-DFA-4             	    4410	     23232 ns/op	 176.31 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/BytesContains-4         	    2390	     51817 ns/op	  79.05 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/BytesContains-4         	    2074	     51006 ns/op	  80.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/BytesContains-4         	    2208	     54121 ns/op	  75.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Cloudflare-TS-4        	     535	    234322 ns/op	 279.68 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Cloudflare-TS-4        	     476	    266101 ns/op	 246.28 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Cloudflare-TS-4        	     574	    227317 ns/op	 288.30 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Bobu-Walk-4            	     674	    181108 ns/op	 361.86 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Bobu-Walk-4            	     546	    199431 ns/op	 328.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Bobu-Walk-4            	     588	    210080 ns/op	 311.96 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Petar-NFA-4            	      97	   1112643 ns/op	  58.90 MB/s	  143096 B/op	    5959 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Petar-NFA-4            	     121	    985607 ns/op	  66.49 MB/s	  143096 B/op	    5959 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Petar-NFA-4            	     122	    966835 ns/op	  67.78 MB/s	  143096 B/op	    5959 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Petar-DFA-4            	     100	   1164105 ns/op	  56.30 MB/s	  238427 B/op	   17875 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Petar-DFA-4            	     100	   1118654 ns/op	  58.58 MB/s	  238424 B/op	   17875 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Petar-DFA-4            	     100	   1056536 ns/op	  62.03 MB/s	  238428 B/op	   17875 allocs/op
+BenchmarkScan/serialization/64KiB-dense/BytesContains-4        	     217	    545724 ns/op	 120.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/BytesContains-4        	     211	    579866 ns/op	 113.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/BytesContains-4        	     212	    555082 ns/op	 118.07 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Cloudflare-TS-4        	     931	    129515 ns/op	 506.01 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Cloudflare-TS-4        	     992	    125627 ns/op	 521.67 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Cloudflare-TS-4        	     897	    128863 ns/op	 508.57 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk-4            	     806	    154610 ns/op	 423.88 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk-4            	     741	    153309 ns/op	 427.48 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk-4            	     799	    152125 ns/op	 430.80 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Petar-NFA-4            	     142	    833185 ns/op	  78.66 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Petar-NFA-4            	     136	    858853 ns/op	  76.31 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Petar-NFA-4            	     146	    817073 ns/op	  80.21 MB/s	     128 B/op	       2 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Petar-DFA-4            	     355	    358809 ns/op	 182.65 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Petar-DFA-4            	     290	    365150 ns/op	 179.48 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Petar-DFA-4            	     363	    336824 ns/op	 194.57 MB/s	     144 B/op	       4 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/BytesContains-4        	     144	    824171 ns/op	  79.52 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/BytesContains-4        	     148	    807068 ns/op	  81.20 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/BytesContains-4        	     145	    826478 ns/op	  79.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Cloudflare-TS-4       	     930	    132138 ns/op	 495.97 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Cloudflare-TS-4       	     963	    124694 ns/op	 525.58 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Cloudflare-TS-4       	     852	    131792 ns/op	 497.27 MB/s	      24 B/op	       1 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk-4           	     762	    155509 ns/op	 421.43 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk-4           	     782	    153413 ns/op	 427.19 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk-4           	     775	    154169 ns/op	 425.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Petar-NFA-4           	     136	    859299 ns/op	  76.27 MB/s	     200 B/op	       5 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Petar-NFA-4           	     140	    841081 ns/op	  77.92 MB/s	     200 B/op	       5 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Petar-NFA-4           	     136	    852676 ns/op	  76.86 MB/s	     200 B/op	       5 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Petar-DFA-4           	     355	    359075 ns/op	 182.51 MB/s	     264 B/op	      13 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Petar-DFA-4           	     345	    325635 ns/op	 201.26 MB/s	     264 B/op	      13 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Petar-DFA-4           	     327	    390520 ns/op	 167.82 MB/s	     264 B/op	      13 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/BytesContains-4       	     140	    860503 ns/op	  76.16 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/BytesContains-4       	     129	    922554 ns/op	  71.04 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/BytesContains-4       	     120	    971782 ns/op	  67.44 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Cloudflare-TS-4              	    3771	     30682 ns/op	2135.98 MB/s	      29 B/op	       1 allocs/op
+BenchmarkParallelScan/information/Cloudflare-TS-4              	    3762	     31436 ns/op	2084.72 MB/s	      29 B/op	       1 allocs/op
+BenchmarkParallelScan/information/Cloudflare-TS-4              	    4825	     26350 ns/op	2487.18 MB/s	      28 B/op	       1 allocs/op
+BenchmarkParallelScan/information/Bobu-Walk-4                  	    2724	     39373 ns/op	1664.48 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Bobu-Walk-4                  	    3020	     39588 ns/op	1655.45 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Bobu-Walk-4                  	    3063	     38607 ns/op	1697.51 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Petar-NFA-4                  	     536	    202685 ns/op	 323.34 MB/s	     201 B/op	       5 allocs/op
+BenchmarkParallelScan/information/Petar-NFA-4                  	     568	    204914 ns/op	 319.82 MB/s	     200 B/op	       5 allocs/op
+BenchmarkParallelScan/information/Petar-NFA-4                  	     494	    213517 ns/op	 306.94 MB/s	     204 B/op	       5 allocs/op
+BenchmarkParallelScan/information/Petar-DFA-4                  	    1003	    106667 ns/op	 614.40 MB/s	     265 B/op	      13 allocs/op
+BenchmarkParallelScan/information/Petar-DFA-4                  	    1250	    114398 ns/op	 572.88 MB/s	     264 B/op	      13 allocs/op
+BenchmarkParallelScan/information/Petar-DFA-4                  	    1131	    113504 ns/op	 577.39 MB/s	     264 B/op	      13 allocs/op
+BenchmarkParallelScan/information/BytesContains-4              	    1066	     99428 ns/op	 659.13 MB/s	       1 B/op	       0 allocs/op
+BenchmarkParallelScan/information/BytesContains-4              	    1342	     89507 ns/op	 732.19 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/BytesContains-4              	    1164	     94003 ns/op	 697.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Cloudflare-TS-4            	    3148	     32887 ns/op	1992.74 MB/s	      47 B/op	       1 allocs/op
+BenchmarkParallelScan/serialization/Cloudflare-TS-4            	    3223	     34577 ns/op	1895.37 MB/s	      47 B/op	       1 allocs/op
+BenchmarkParallelScan/serialization/Cloudflare-TS-4            	    3169	     34698 ns/op	1888.75 MB/s	      47 B/op	       1 allocs/op
+BenchmarkParallelScan/serialization/Bobu-Walk-4                	    2480	     40882 ns/op	1603.04 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Bobu-Walk-4                	    2515	     40065 ns/op	1635.75 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Bobu-Walk-4                	    3036	     39379 ns/op	1664.22 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Petar-NFA-4                	     560	    216934 ns/op	 302.10 MB/s	     203 B/op	       5 allocs/op
+BenchmarkParallelScan/serialization/Petar-NFA-4                	     535	    205909 ns/op	 318.28 MB/s	     201 B/op	       5 allocs/op
+BenchmarkParallelScan/serialization/Petar-NFA-4                	     582	    223496 ns/op	 293.23 MB/s	     201 B/op	       5 allocs/op
+BenchmarkParallelScan/serialization/Petar-DFA-4                	     938	    114471 ns/op	 572.51 MB/s	     265 B/op	      13 allocs/op
+BenchmarkParallelScan/serialization/Petar-DFA-4                	     926	    125430 ns/op	 522.49 MB/s	     264 B/op	      13 allocs/op
+BenchmarkParallelScan/serialization/Petar-DFA-4                	    1130	     96093 ns/op	 682.01 MB/s	     265 B/op	      13 allocs/op
+BenchmarkParallelScan/serialization/BytesContains-4            	     525	    263043 ns/op	 249.15 MB/s	       1 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/BytesContains-4            	     502	    247573 ns/op	 264.71 MB/s	       1 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/BytesContains-4            	     494	    266078 ns/op	 246.30 MB/s	       1 B/op	       0 allocs/op
+BenchmarkBuild/information/Cloudflare-TS-4                     	     153	    748555 ns/op	  855702 B/op	     413 allocs/op
+BenchmarkBuild/information/Cloudflare-TS-4                     	     145	    807043 ns/op	  855703 B/op	     413 allocs/op
+BenchmarkBuild/information/Cloudflare-TS-4                     	     204	    601487 ns/op	  855704 B/op	     413 allocs/op
+BenchmarkBuild/information/Bobu-Walk-4                         	      49	   2412009 ns/op	  408576 B/op	     525 allocs/op
+BenchmarkBuild/information/Bobu-Walk-4                         	      45	   2312580 ns/op	  408577 B/op	     525 allocs/op
+BenchmarkBuild/information/Bobu-Walk-4                         	      51	   2455952 ns/op	  408569 B/op	     525 allocs/op
+BenchmarkBuild/information/Petar-NFA-4                         	    1540	     95288 ns/op	   87304 B/op	     576 allocs/op
+BenchmarkBuild/information/Petar-NFA-4                         	    1652	     91227 ns/op	   87304 B/op	     576 allocs/op
+BenchmarkBuild/information/Petar-NFA-4                         	    1581	     88808 ns/op	   87304 B/op	     576 allocs/op
+BenchmarkBuild/information/Petar-DFA-4                         	      92	   2072258 ns/op	  865296 B/op	   56870 allocs/op
+BenchmarkBuild/information/Petar-DFA-4                         	      97	   2093885 ns/op	  865293 B/op	   56870 allocs/op
+BenchmarkBuild/information/Petar-DFA-4                         	      96	   1801983 ns/op	  865293 B/op	   56870 allocs/op
+BenchmarkBuild/information/BytesContains-4                     	  114276	      1132 ns/op	     960 B/op	      28 allocs/op
+BenchmarkBuild/information/BytesContains-4                     	  103798	      1069 ns/op	     960 B/op	      28 allocs/op
+BenchmarkBuild/information/BytesContains-4                     	  117669	      1081 ns/op	     960 B/op	      28 allocs/op
+BenchmarkBuild/serialization/Cloudflare-TS-4                   	      56	   2266220 ns/op	 3475725 B/op	    1639 allocs/op
+BenchmarkBuild/serialization/Cloudflare-TS-4                   	      58	   2103498 ns/op	 3475724 B/op	    1639 allocs/op
+BenchmarkBuild/serialization/Cloudflare-TS-4                   	      72	   2263418 ns/op	 3475725 B/op	    1639 allocs/op
+BenchmarkBuild/serialization/Bobu-Walk-4                       	      10	  11128010 ns/op	 1699490 B/op	    2189 allocs/op
+BenchmarkBuild/serialization/Bobu-Walk-4                       	      10	  10976964 ns/op	 1699476 B/op	    2189 allocs/op
+BenchmarkBuild/serialization/Bobu-Walk-4                       	      10	  11164416 ns/op	 1699485 B/op	    2189 allocs/op
+BenchmarkBuild/serialization/Petar-NFA-4                       	     399	    304092 ns/op	  267033 B/op	    2299 allocs/op
+BenchmarkBuild/serialization/Petar-NFA-4                       	     391	    331380 ns/op	  267033 B/op	    2299 allocs/op
+BenchmarkBuild/serialization/Petar-NFA-4                       	     338	    362521 ns/op	  267034 B/op	    2299 allocs/op
+BenchmarkBuild/serialization/Petar-DFA-4                       	       9	  11826801 ns/op	 3745384 B/op	  249723 allocs/op
+BenchmarkBuild/serialization/Petar-DFA-4                       	      12	   8956236 ns/op	 3745345 B/op	  249723 allocs/op
+BenchmarkBuild/serialization/Petar-DFA-4                       	      13	   9092077 ns/op	 3745368 B/op	  249723 allocs/op
+BenchmarkBuild/serialization/BytesContains-4                   	   45094	      3267 ns/op	    2496 B/op	      59 allocs/op
+BenchmarkBuild/serialization/BytesContains-4                   	   42596	      3207 ns/op	    2496 B/op	      59 allocs/op
+BenchmarkBuild/serialization/BytesContains-4                   	   39037	      3087 ns/op	    2496 B/op	      59 allocs/op
+PASS
+ok  	ac-evaluation	27.652s

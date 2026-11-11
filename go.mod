@@ -7,9 +7,11 @@ require (
 	github.com/bogdanfinn/fhttp v0.6.8
 	github.com/bogdanfinn/tls-client v1.15.1
 	github.com/bogdanfinn/utls v1.7.7-barnius
+	github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396
 	github.com/klauspost/compress v1.18.6
 	github.com/oschwald/geoip2-golang v1.13.0
 	golang.org/x/net v0.59.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
@@ -23,6 +25,5 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/tam7t/hpkp v0.0.0-20160821193359-2b70b4024ed5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

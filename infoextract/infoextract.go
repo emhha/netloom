@@ -5,7 +5,9 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 
+	"github.com/emhha/netloom/ac"
 	"github.com/emhha/netloom/httpdata"
 )
 
@@ -40,11 +42,46 @@ type compiledRule struct {
 }
 
 // InfoExtractor is the two-phase sensitive-information extraction engine.
-// It is safe for concurrent use.
+// It is safe for concurrent use and must not be copied after first use.
 type InfoExtractor struct {
-	mu    sync.RWMutex
-	rules []compiledRule // ordered; later entries shadow earlier ones with same Name
-	ac    *automaton     // nil when no triggers exist (all fallback rules)
+	mu       sync.RWMutex
+	rules    []compiledRule // ordered, immutable snapshots; published together with ac
+	ac       *ac.Matcher    // nil when no triggers exist (all fallback rules)
+	identity uint64
+}
+
+var nextSnapshotIdentity atomic.Uint64
+
+// Snapshot is an immutable ruleset and its matching AC index. It is safe to
+// copy and use concurrently; later AddRule calls do not change its results.
+// Its zero value is an empty ruleset with identity zero.
+type Snapshot struct {
+	rules    []compiledRule
+	ac       *ac.Matcher
+	identity uint64
+}
+
+// Identity returns a process-local cache identity, unique across published
+// ruleset generations and extractor instances. It is not a persistent version
+// or a content hash. Obtain a new Snapshot to observe successful AddRule calls.
+func (s Snapshot) Identity() uint64 { return s.identity }
+
+// Snapshot captures the rules, AC index and identity under the same lock.
+// Even a zero-value InfoExtractor receives its own nonzero initial identity.
+func (e *InfoExtractor) Snapshot() Snapshot {
+	e.mu.RLock()
+	if e.identity != 0 {
+		s := Snapshot{rules: e.rules, ac: e.ac, identity: e.identity}
+		e.mu.RUnlock()
+		return s
+	}
+	e.mu.RUnlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.identity == 0 {
+		e.identity = nextSnapshotIdentity.Add(1)
+	}
+	return Snapshot{rules: e.rules, ac: e.ac, identity: e.identity}
 }
 
 // New returns an InfoExtractor pre-loaded with the built-in ruleset.
@@ -86,6 +123,16 @@ func (e *InfoExtractor) ExtractWithContentType(
 	header map[string][]string,
 	contentType string,
 ) []Finding {
+	return e.Snapshot().ExtractWithContentType(body, header, contentType)
+}
+
+// ExtractWithContentType scans both body and headers using this one immutable
+// generation, with the same routing and result semantics as InfoExtractor.
+func (s Snapshot) ExtractWithContentType(
+	body []byte,
+	header map[string][]string,
+	contentType string,
+) []Finding {
 	ct := strings.ToLower(contentType)
 	// strip parameters (e.g. "text/html; charset=utf-8")
 	if idx := strings.IndexByte(ct, ';'); idx >= 0 {
@@ -94,9 +141,9 @@ func (e *InfoExtractor) ExtractWithContentType(
 
 	var findings []Finding
 	if !isBinary(ct) {
-		findings = append(findings, e.extractBody(body, ct)...)
+		findings = append(findings, s.extractBody(body, ct)...)
 	}
-	findings = append(findings, e.extractScope(serializeHeader(header), "header")...)
+	findings = append(findings, s.extractScope(serializeHeader(header), "header")...)
 	return findings
 }
 
@@ -129,18 +176,24 @@ func (e *InfoExtractor) addRuleLocked(r Rule) error {
 
 // upsertLocked inserts or replaces by Name. Must be called with mu held (write).
 func (e *InfoExtractor) upsertLocked(cr compiledRule) {
-	for i, existing := range e.rules {
+	// Readers retain the slice after releasing mu. Never mutate its backing
+	// array: publish a new rules snapshot under the same lock as its matcher.
+	rules := make([]compiledRule, len(e.rules), len(e.rules)+1)
+	copy(rules, e.rules)
+	for i, existing := range rules {
 		if existing.Name == cr.Name {
-			e.rules[i] = cr
+			rules[i] = cr
+			e.rules = rules
 			return
 		}
 	}
-	e.rules = append(e.rules, cr)
+	e.rules = append(rules, cr)
 }
 
 // rebuildAC rebuilds the Aho-Corasick automaton from current rules.
 // Must be called with mu held (write), or during single-threaded init.
 func (e *InfoExtractor) rebuildAC() {
+	e.identity = nextSnapshotIdentity.Add(1)
 	var keywords []string
 	seen := make(map[string]struct{})
 	for _, cr := range e.rules {
@@ -155,12 +208,12 @@ func (e *InfoExtractor) rebuildAC() {
 		e.ac = nil
 		return
 	}
-	e.ac = newAutomaton(keywords)
+	e.ac = ac.New(keywords)
 }
 
 // extractBody applies content-type routing and runs the two-phase extraction
 // on the body bytes, returning findings with Scope="body".
-func (e *InfoExtractor) extractBody(body []byte, ct string) []Finding {
+func (s Snapshot) extractBody(body []byte, ct string) []Finding {
 	isJS := ct == "application/javascript" || ct == "text/javascript"
 	isJSON := ct == "application/json"
 	isSpecial := isJS || isJSON
@@ -170,10 +223,7 @@ func (e *InfoExtractor) extractBody(body []byte, ct string) []Finding {
 		scanBody = body[:headOnlySize]
 	}
 
-	e.mu.RLock()
-	rules := e.rules
-	ac := e.ac
-	e.mu.RUnlock()
+	rules, ac := s.rules, s.ac
 
 	var hitTriggers map[string]struct{}
 	if ac != nil {
@@ -201,10 +251,11 @@ func (e *InfoExtractor) extractBody(body []byte, ct string) []Finding {
 // extractScope runs the two-phase extraction on content with the given scope
 // ("body" or "header"). Used directly for header scanning.
 func (e *InfoExtractor) extractScope(content []byte, scope string) []Finding {
-	e.mu.RLock()
-	rules := e.rules
-	ac := e.ac
-	e.mu.RUnlock()
+	return e.Snapshot().extractScope(content, scope)
+}
+
+func (s Snapshot) extractScope(content []byte, scope string) []Finding {
+	rules, ac := s.rules, s.ac
 
 	var hitTriggers map[string]struct{}
 	if ac != nil {
@@ -253,6 +304,11 @@ func compile(r Rule) (compiledRule, error) {
 	if r.Sensitivity == "" {
 		r.Sensitivity = "low"
 	}
+	// Own the trigger slice, since future rebuilds must use the same keywords
+	// as triggerSet even if the caller reuses its Rule after AddRule returns.
+	// Preserve empty elements: only an empty slice means fallback; a rule
+	// containing solely empty keywords never triggered in the original AC.
+	r.Triggers = append([]string(nil), r.Triggers...)
 	ts := make(map[string]struct{}, len(r.Triggers))
 	for _, t := range r.Triggers {
 		ts[t] = struct{}{}

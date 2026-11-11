@@ -1,0 +1,14 @@
+=== RUN   TestRetainedHeap
+    evaluation_test.go:240: information/Cloudflare-TS retained_build_bytes=843936 after_cold_scan_bytes=849408
+    evaluation_test.go:240: information/Bobu-Walk retained_build_bytes=181672 after_cold_scan_bytes=181672
+    evaluation_test.go:240: information/Petar-NFA retained_build_bytes=54696 after_cold_scan_bytes=59984
+    evaluation_test.go:240: information/Petar-DFA retained_build_bytes=94992 after_cold_scan_bytes=94976
+    evaluation_test.go:240: information/BytesContains retained_build_bytes=88 after_cold_scan_bytes=104
+    evaluation_test.go:240: serialization/Cloudflare-TS retained_build_bytes=3433968 after_cold_scan_bytes=3453008
+    evaluation_test.go:240: serialization/Bobu-Walk retained_build_bytes=754120 after_cold_scan_bytes=754120
+    evaluation_test.go:240: serialization/Petar-NFA retained_build_bytes=138280 after_cold_scan_bytes=138264
+    evaluation_test.go:240: serialization/Petar-DFA retained_build_bytes=494064 after_cold_scan_bytes=494064
+    evaluation_test.go:240: serialization/BytesContains retained_build_bytes=1736 after_cold_scan_bytes=1736
+--- PASS: TestRetainedHeap (0.06s)
+PASS
+ok  	ac-evaluation	0.065s

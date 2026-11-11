@@ -21,9 +21,9 @@ companies, err := provider.SearchByName(ctx, "示例公司")
 - `GetCompanyDetail`、`GetSubsidiaries`、`GetBranches` 返回公司节点与关系。遍历深度、聚合和持久化由调用方决定；`EnterpriseTree` 只是模型，不会自行抓取整棵树。
 - `FetchTable` 接受 `icp`、`wechat`、`app`、`copyright`。凭据校验后，不支持的字段返回 nil 表与 nil 错误；解引用前须判断结果是否为 nil。
 
-每次公开查询都会重新读取 Cookie，支持调用方轮换。读取器为 nil、读取失败或 Cookie 为空时返回 `ErrNotConfigured`。凭据存储、加解密、获取、续期与日志策略由调用方负责。使用期间不要修改数据源依赖；并发调用须提供并发安全的实现。
+每次公开查询都会重新读取 Cookie，同一次查询的分页共用该 Cookie，支持调用方在下次查询时轮换。读取器为 nil 或 Cookie 去除首尾空白后为空时返回 `ErrNotConfigured`。缺失凭据应返回空值与 nil 错误；读取失败（包括取消、权限或解密错误）通过 `%w` 传播，可用 `errors.Is` 判断原始原因，不再伪装成未配置，也不会发起 HTTP 请求。凭据存储、加解密、获取、续期与日志策略由调用方负责。使用期间不要修改数据源依赖；并发调用须提供并发安全的实现。
 
-响应通过 [httpclient.ReadBody](../httpclient/README.md) 读取并关闭，受其 8 MiB 上限约束。网络取消、按数据源限流与重试由注入的客户端提供。不能接受重复请求或额外配额消耗时，应禁用自动重试。
+响应通过 [httpclient.ReadBody](../httpclient/README.md) 读取并关闭，受其 8 MiB 上限约束。网络取消、按数据源限流与重试由注入的客户端提供。不能接受额外配额消耗时，应禁用客户端的自动重试循环以减少重复风险；底层 HTTP 传输仍可能透明重发，不能代替上游幂等或计费协议，也不提供 exactly-once 保证。
 
 ## 错误与兼容限制
 
@@ -33,4 +33,4 @@ companies, err := provider.SearchByName(ctx, "示例公司")
 
 ## 验证
 
-在仓库根目录运行 `go test ./enterprise` 和 `go test -race ./enterprise`。现有测试使用本地 HTTP 夹具，覆盖代表性的搜索、详情、关系、表格、错误响应及 JSON 字段名，需要允许绑定回环 socket。测试不证明真实爱企查访问、当前响应格式兼容或验证挑战处理成功。
+在仓库根目录运行 `go test ./enterprise` 和 `go test -race ./enterprise`。现有测试使用内存客户端及本地 HTTP 夹具，覆盖所有公开查询的凭据缺失、空白、读取错误传播、Cookie 轮换，以及代表性的搜索、详情、关系、表格、错误响应及 JSON 字段名；本地 HTTP 夹具需要允许绑定回环 socket。测试不证明真实爱企查访问、当前响应格式兼容或验证挑战处理成功。

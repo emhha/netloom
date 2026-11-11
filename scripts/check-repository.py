@@ -8,6 +8,8 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 MODULE = "github.com/emhha/netloom"
+# Only reviewed, runtime-neutral private helpers may be shared by root/extension.
+ROOT_SHARED_INTERNAL = frozenset({MODULE + "/internal/proxyconfig"})
 UPSTREAM = ("dirscan/wordlists/dirsearch/",)
 REQUIRED = (
     "README.md", "AGENTS.md", "CONTRIBUTING.md", "Makefile",
@@ -104,8 +106,10 @@ def check(root):
         # Runtime and neutral snapshots must stay independent of extensions.
         if not path.name.endswith("_test.go"):
             local_refs = [name for name in imports if name == MODULE or name.startswith(MODULE + "/")]
-            if path.parent == root and local_refs:
+            if path.parent == root and any(name not in ROOT_SHARED_INTERNAL for name in local_refs):
                 errors.append(f"{relative}: root runtime must not import extensions")
+            if path.parent == root / "internal/proxyconfig" and local_refs:
+                errors.append(f"{relative}: shared proxy validation must not import runtime/extensions")
             if path.parent == root / "httpdata" and local_refs:
                 errors.append(f"{relative}: neutral httpdata must not import runtime/extensions")
         if re.search(r"\bnetrt\b|\bnetrtdata\b|netloom\.local/", text, re.I):

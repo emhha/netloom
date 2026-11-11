@@ -1,0 +1,52 @@
+package evaluation
+
+import (
+	"bytes"
+	"math/rand"
+	"testing"
+)
+
+func variedCorpus() map[string][]byte {
+	json := bytes.Repeat([]byte(`{"items":[{"id":1234,"name":"ordinary商品","enabled":true}],"next":null}`+"\n"), 1200)[:64<<10]
+	binary := make([]byte, 64<<10)
+	rand.New(rand.NewSource(211)).Read(binary)
+	return map[string][]byte{"64KiB-json": json, "64KiB-binary": binary}
+}
+func TestVariedEquivalence(t *testing.T) {
+	for set, words := range dictionaries {
+		for name, data := range variedCorpus() {
+			for _, impl := range backends {
+				scan := impl.build(words)
+				seen := make([]bool, len(words))
+				scan(data, seen)
+				for i, w := range words {
+					if seen[i] != bytes.Contains(data, []byte(w)) {
+						t.Fatalf("%s/%s/%s keyword %q", set, name, impl.name, w)
+					}
+				}
+			}
+		}
+	}
+}
+func BenchmarkVaried(b *testing.B) {
+	for _, set := range []string{"information", "serialization"} {
+		words := dictionaries[set]
+		samples := variedCorpus()
+		for _, name := range []string{"64KiB-json", "64KiB-binary"} {
+			data := samples[name]
+			for _, impl := range backends {
+				b.Run(set+"/"+name+"/"+impl.name, func(b *testing.B) {
+					scan := impl.build(words)
+					seen := make([]bool, len(words))
+					scan(data, seen)
+					b.ReportAllocs()
+					b.SetBytes(int64(len(data)))
+					for b.Loop() {
+						clear(seen)
+						scan(data, seen)
+					}
+				})
+			}
+		}
+	}
+}

@@ -95,45 +95,74 @@ func (b *bucket) wait(ctx context.Context) error {
 	}
 }
 
-// hostSemaphore caps concurrent in-flight requests per host.
+// hostSemaphore caps concurrent in-flight requests per host. References include
+// holders AND waiters: an idle entry can only disappear once neither remains.
+// This prevents a new channel from bypassing waiters on an evicted entry.
 type hostSemaphore struct {
 	mu    sync.Mutex
 	limit int
-	used  map[string]chan struct{}
+	used  map[string]*hostSlots
+}
+
+type hostSlots struct {
+	slots chan struct{}
+	refs  int
 }
 
 func newHostSemaphore(limit int) *hostSemaphore {
 	if limit <= 0 {
 		limit = 1
 	}
-	return &hostSemaphore{limit: limit, used: map[string]chan struct{}{}}
-}
-
-func (h *hostSemaphore) chanFor(host string) chan struct{} {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	ch, ok := h.used[host]
-	if !ok {
-		ch = make(chan struct{}, h.limit)
-		h.used[host] = ch
-	}
-	return ch
+	return &hostSemaphore{limit: limit, used: map[string]*hostSlots{}}
 }
 
 func (h *hostSemaphore) acquire(ctx context.Context, host string) error {
-	ch := h.chanFor(host)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	h.mu.Lock()
+	entry := h.used[host]
+	if entry == nil {
+		entry = &hostSlots{slots: make(chan struct{}, h.limit)}
+		h.used[host] = entry
+	}
+	entry.refs++
+	h.mu.Unlock()
+
 	select {
-	case ch <- struct{}{}:
+	case entry.slots <- struct{}{}:
+		// Cancellation may race a newly available slot. Do not retain it.
+		if err := ctx.Err(); err != nil {
+			h.release(host)
+			return err
+		}
 		return nil
 	case <-ctx.Done():
+		h.mu.Lock()
+		h.unref(host, entry)
+		h.mu.Unlock()
 		return ctx.Err()
 	}
 }
 
+// unref runs under mu, including on canceled waiters that never held a slot.
+func (h *hostSemaphore) unref(host string, entry *hostSlots) {
+	entry.refs--
+	if entry.refs == 0 {
+		delete(h.used, host)
+	}
+}
+
 func (h *hostSemaphore) release(host string) {
-	ch := h.chanFor(host)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	entry := h.used[host]
+	if entry == nil {
+		return
+	}
 	select {
-	case <-ch:
+	case <-entry.slots:
+		h.unref(host, entry)
 	default:
 	}
 }

@@ -1,0 +1,452 @@
+{
+  "BenchmarkScan/information/256KiB-nohit/Cloudflare-TS": {
+    "median_ns_op": 497370.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/256KiB-nohit/Bobu-Walk": {
+    "median_ns_op": 615001.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/256KiB-nohit/Petar-NFA": {
+    "median_ns_op": 3394866.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkScan/information/256KiB-nohit/Petar-DFA": {
+    "median_ns_op": 1352073.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkScan/information/256KiB-nohit/BytesContains": {
+    "median_ns_op": 1589484.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/4KiB-nohit/Cloudflare-TS": {
+    "median_ns_op": 7520.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/4KiB-nohit/Bobu-Walk": {
+    "median_ns_op": 9567.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/4KiB-nohit/Petar-NFA": {
+    "median_ns_op": 50903.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkScan/information/4KiB-nohit/Petar-DFA": {
+    "median_ns_op": 24909.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkScan/information/4KiB-nohit/BytesContains": {
+    "median_ns_op": 24873.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-dense/Cloudflare-TS": {
+    "median_ns_op": 280682.0,
+    "median_bytes_op": 24.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkScan/information/64KiB-dense/Bobu-Walk": {
+    "median_ns_op": 190465.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-dense/Petar-NFA": {
+    "median_ns_op": 1274636.0,
+    "median_bytes_op": 236049.0,
+    "median_allocs_op": 9832.0
+  },
+  "BenchmarkScan/information/64KiB-dense/Petar-DFA": {
+    "median_ns_op": 1583294.0,
+    "median_bytes_op": 393345.0,
+    "median_allocs_op": 29494.0
+  },
+  "BenchmarkScan/information/64KiB-dense/BytesContains": {
+    "median_ns_op": 492524.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-nohit/Cloudflare-TS": {
+    "median_ns_op": 115569.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-nohit/Bobu-Walk": {
+    "median_ns_op": 152711.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-nohit/Petar-NFA": {
+    "median_ns_op": 822748.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkScan/information/64KiB-nohit/Petar-DFA": {
+    "median_ns_op": 339242.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkScan/information/64KiB-nohit/BytesContains": {
+    "median_ns_op": 381567.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-sparse/Cloudflare-TS": {
+    "median_ns_op": 106738.0,
+    "median_bytes_op": 24.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkScan/information/64KiB-sparse/Bobu-Walk": {
+    "median_ns_op": 150761.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/information/64KiB-sparse/Petar-NFA": {
+    "median_ns_op": 819600.0,
+    "median_bytes_op": 200.0,
+    "median_allocs_op": 5.0
+  },
+  "BenchmarkScan/information/64KiB-sparse/Petar-DFA": {
+    "median_ns_op": 349614.0,
+    "median_bytes_op": 264.0,
+    "median_allocs_op": 13.0
+  },
+  "BenchmarkScan/information/64KiB-sparse/BytesContains": {
+    "median_ns_op": 348826.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/256KiB-nohit/Cloudflare-TS": {
+    "median_ns_op": 523901.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk": {
+    "median_ns_op": 609084.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/256KiB-nohit/Petar-NFA": {
+    "median_ns_op": 3366368.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkScan/serialization/256KiB-nohit/Petar-DFA": {
+    "median_ns_op": 1457867.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkScan/serialization/256KiB-nohit/BytesContains": {
+    "median_ns_op": 3373591.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/4KiB-nohit/Cloudflare-TS": {
+    "median_ns_op": 8207.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk": {
+    "median_ns_op": 9195.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/4KiB-nohit/Petar-NFA": {
+    "median_ns_op": 52285.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkScan/serialization/4KiB-nohit/Petar-DFA": {
+    "median_ns_op": 23232.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkScan/serialization/4KiB-nohit/BytesContains": {
+    "median_ns_op": 51817.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-dense/Cloudflare-TS": {
+    "median_ns_op": 234322.0,
+    "median_bytes_op": 24.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkScan/serialization/64KiB-dense/Bobu-Walk": {
+    "median_ns_op": 199431.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-dense/Petar-NFA": {
+    "median_ns_op": 985607.0,
+    "median_bytes_op": 143096.0,
+    "median_allocs_op": 5959.0
+  },
+  "BenchmarkScan/serialization/64KiB-dense/Petar-DFA": {
+    "median_ns_op": 1118654.0,
+    "median_bytes_op": 238427.0,
+    "median_allocs_op": 17875.0
+  },
+  "BenchmarkScan/serialization/64KiB-dense/BytesContains": {
+    "median_ns_op": 555082.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-nohit/Cloudflare-TS": {
+    "median_ns_op": 128863.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk": {
+    "median_ns_op": 153309.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-nohit/Petar-NFA": {
+    "median_ns_op": 833185.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkScan/serialization/64KiB-nohit/Petar-DFA": {
+    "median_ns_op": 358809.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkScan/serialization/64KiB-nohit/BytesContains": {
+    "median_ns_op": 824171.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-sparse/Cloudflare-TS": {
+    "median_ns_op": 131792.0,
+    "median_bytes_op": 24.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk": {
+    "median_ns_op": 154169.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkScan/serialization/64KiB-sparse/Petar-NFA": {
+    "median_ns_op": 852676.0,
+    "median_bytes_op": 200.0,
+    "median_allocs_op": 5.0
+  },
+  "BenchmarkScan/serialization/64KiB-sparse/Petar-DFA": {
+    "median_ns_op": 359075.0,
+    "median_bytes_op": 264.0,
+    "median_allocs_op": 13.0
+  },
+  "BenchmarkScan/serialization/64KiB-sparse/BytesContains": {
+    "median_ns_op": 922554.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkParallelScan/information/Cloudflare-TS": {
+    "median_ns_op": 30682.0,
+    "median_bytes_op": 29.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkParallelScan/information/Bobu-Walk": {
+    "median_ns_op": 39373.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkParallelScan/information/Petar-NFA": {
+    "median_ns_op": 204914.0,
+    "median_bytes_op": 201.0,
+    "median_allocs_op": 5.0
+  },
+  "BenchmarkParallelScan/information/Petar-DFA": {
+    "median_ns_op": 113504.0,
+    "median_bytes_op": 264.0,
+    "median_allocs_op": 13.0
+  },
+  "BenchmarkParallelScan/information/BytesContains": {
+    "median_ns_op": 94003.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkParallelScan/serialization/Cloudflare-TS": {
+    "median_ns_op": 34577.0,
+    "median_bytes_op": 47.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkParallelScan/serialization/Bobu-Walk": {
+    "median_ns_op": 40065.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkParallelScan/serialization/Petar-NFA": {
+    "median_ns_op": 216934.0,
+    "median_bytes_op": 201.0,
+    "median_allocs_op": 5.0
+  },
+  "BenchmarkParallelScan/serialization/Petar-DFA": {
+    "median_ns_op": 114471.0,
+    "median_bytes_op": 265.0,
+    "median_allocs_op": 13.0
+  },
+  "BenchmarkParallelScan/serialization/BytesContains": {
+    "median_ns_op": 263043.0,
+    "median_bytes_op": 1.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkBuild/information/Cloudflare-TS": {
+    "median_ns_op": 748555.0,
+    "median_bytes_op": 855703.0,
+    "median_allocs_op": 413.0
+  },
+  "BenchmarkBuild/information/Bobu-Walk": {
+    "median_ns_op": 2412009.0,
+    "median_bytes_op": 408576.0,
+    "median_allocs_op": 525.0
+  },
+  "BenchmarkBuild/information/Petar-NFA": {
+    "median_ns_op": 91227.0,
+    "median_bytes_op": 87304.0,
+    "median_allocs_op": 576.0
+  },
+  "BenchmarkBuild/information/Petar-DFA": {
+    "median_ns_op": 2072258.0,
+    "median_bytes_op": 865293.0,
+    "median_allocs_op": 56870.0
+  },
+  "BenchmarkBuild/information/BytesContains": {
+    "median_ns_op": 1081.0,
+    "median_bytes_op": 960.0,
+    "median_allocs_op": 28.0
+  },
+  "BenchmarkBuild/serialization/Cloudflare-TS": {
+    "median_ns_op": 2263418.0,
+    "median_bytes_op": 3475725.0,
+    "median_allocs_op": 1639.0
+  },
+  "BenchmarkBuild/serialization/Bobu-Walk": {
+    "median_ns_op": 11128010.0,
+    "median_bytes_op": 1699485.0,
+    "median_allocs_op": 2189.0
+  },
+  "BenchmarkBuild/serialization/Petar-NFA": {
+    "median_ns_op": 331380.0,
+    "median_bytes_op": 267033.0,
+    "median_allocs_op": 2299.0
+  },
+  "BenchmarkBuild/serialization/Petar-DFA": {
+    "median_ns_op": 9092077.0,
+    "median_bytes_op": 3745368.0,
+    "median_allocs_op": 249723.0
+  },
+  "BenchmarkBuild/serialization/BytesContains": {
+    "median_ns_op": 3207.0,
+    "median_bytes_op": 2496.0,
+    "median_allocs_op": 59.0
+  },
+  "BenchmarkVaried/information/64KiB-json/Cloudflare-TS": {
+    "median_ns_op": 91315.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/information/64KiB-json/Bobu-Walk": {
+    "median_ns_op": 150115.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/information/64KiB-json/Petar-NFA": {
+    "median_ns_op": 761484.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkVaried/information/64KiB-json/Petar-DFA": {
+    "median_ns_op": 350407.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkVaried/information/64KiB-json/BytesContains": {
+    "median_ns_op": 318115.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/information/64KiB-binary/Cloudflare-TS": {
+    "median_ns_op": 92544.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/information/64KiB-binary/Bobu-Walk": {
+    "median_ns_op": 155126.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/information/64KiB-binary/Petar-NFA": {
+    "median_ns_op": 761010.0,
+    "median_bytes_op": 128.0,
+    "median_allocs_op": 2.0
+  },
+  "BenchmarkVaried/information/64KiB-binary/Petar-DFA": {
+    "median_ns_op": 359671.0,
+    "median_bytes_op": 144.0,
+    "median_allocs_op": 4.0
+  },
+  "BenchmarkVaried/information/64KiB-binary/BytesContains": {
+    "median_ns_op": 131533.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/serialization/64KiB-json/Cloudflare-TS": {
+    "median_ns_op": 97203.0,
+    "median_bytes_op": 8.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkVaried/serialization/64KiB-json/Bobu-Walk": {
+    "median_ns_op": 166442.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/serialization/64KiB-json/Petar-NFA": {
+    "median_ns_op": 823505.0,
+    "median_bytes_op": 21104.0,
+    "median_allocs_op": 876.0
+  },
+  "BenchmarkVaried/serialization/64KiB-json/Petar-DFA": {
+    "median_ns_op": 490351.0,
+    "median_bytes_op": 35104.0,
+    "median_allocs_op": 2626.0
+  },
+  "BenchmarkVaried/serialization/64KiB-json/BytesContains": {
+    "median_ns_op": 320748.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/serialization/64KiB-binary/Cloudflare-TS": {
+    "median_ns_op": 131592.0,
+    "median_bytes_op": 32.0,
+    "median_allocs_op": 1.0
+  },
+  "BenchmarkVaried/serialization/64KiB-binary/Bobu-Walk": {
+    "median_ns_op": 165332.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  },
+  "BenchmarkVaried/serialization/64KiB-binary/Petar-NFA": {
+    "median_ns_op": 806056.0,
+    "median_bytes_op": 6296.0,
+    "median_allocs_op": 259.0
+  },
+  "BenchmarkVaried/serialization/64KiB-binary/Petar-DFA": {
+    "median_ns_op": 385715.0,
+    "median_bytes_op": 10424.0,
+    "median_allocs_op": 775.0
+  },
+  "BenchmarkVaried/serialization/64KiB-binary/BytesContains": {
+    "median_ns_op": 302512.0,
+    "median_bytes_op": 0.0,
+    "median_allocs_op": 0.0
+  }
+}

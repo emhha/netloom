@@ -8,9 +8,25 @@ go vet ./...
 go build ./...
 ```
 
-默认测试不要求真实数据源凭据或付费查询，但部分传输、代理、HTTP 会话和 GeoIP 更新用例会启动本地可控 HTTP/TLS 服务，因此需要允许本机 TCP socket。Go module 依赖首次构建前也需要准备齐全。`mapping` 当前没有包内协议测试，构建通过不代表已验证第三方服务行为。
+默认测试不要求真实数据源凭据或付费查询，但部分传输、代理、HTTP 会话和 GeoIP 更新用例会启动本地可控 HTTP/TLS 服务，因此需要允许本机 TCP socket。Go module 依赖首次构建前也需要准备齐全。数据源的 fake client/凭据读取器测试验证本地契约，不代表已验证真实第三方服务。
 
 `fingerprint` 使用仓库随附规则做离线加载、等价性和匹配测试；不主动扫描外网。字典测试使用固定快照，不应联网更新。
+
+## 代理失败关闭回归
+
+```sh
+go test -race . ./httpclient ./nethttp ./internal/proxyconfig -run 'Proxy|CurlUnsupported|TestParse$' -count=10
+```
+
+纯解析测试覆盖空值直连、空白/缺 host/无效端口/路径/query/fragment 拒绝、各包支持的 scheme、凭据和 IPv6。入口测试检查无效代理不消耗准入/源限流、不发送、不打开重放正文、不修改 User-Agent，不回显凭据、不累计目标失败；Mutators 能修复或制造配置错误。有效 HTTP 代理另用本地服务检查实际转发与认证。HTTPS/SOCKS 的解析和客户端构造通过不代表这些外部代理端到端成功，也不等同于实时取消保证；HTTP CONNECT 取消由本地代理回归覆盖。
+
+## API 凭据与重试回归
+
+```sh
+go test -race ./mapping ./enterprise ./httpclient
+```
+
+凭据测试注入 fake reader/client，验证缺失与存储错误、取消/deadline 错误链、同时返回值和错误时优先报错，以及读取失败零 HTTP 调用。FOFA 分页固定同次 key/email、下次查询轮换；三个测绘引擎验证 trim/轮换及仅需 Get 或 Post 的窄接口，爱企查检查五个公开方法、Cookie 修剪和不支持字段的既有验证顺序。会话的 fake RoundTripper 检查默认安全方法、POST 显式允许、nil/空/无效方法列表、配置副本、一次性正文不重试、最终响应体归属与网络耗尽错误链。测试不请求真实付费 API，不证明 exactly-once 或账户计费策略。
 
 ## HTTP 可靠性回归
 
@@ -59,6 +75,22 @@ go test -race ./...
 ```
 
 需要支持 race 的 Go 工具链、CGO 和 C 编译器。涉及 Engine 关闭、调度、缓存、流式响应、Cookie 或 GeoIP reload 的修改应运行相关包的 race 测试；重命名或依赖调整后建议全包执行。
+
+## 调度与主机状态回归
+
+```sh
+go test -race . -run '^Test(EngineLifecycleRegression|HostSemaphore|EngineSendReleasesDistinctHostState|SchedulerHostErrorHistoryIsRunScoped)' -count=10 -timeout=180s
+```
+
+使用注入 transport 和 channel 屏障覆盖 Run/Submit/Close 启动竞争、single-flight、取消与背压、多个 Close 等待在途退出及结果通道关闭；同主机等待者不能被状态回收拆成两套配额，取消等待者释放引用，大量不同主机 Send 后无空闲槽残留，成功重置及 Run 结束释放错误历史，Run 内跳过仍 sticky。重复竞争加 race 不等于证明全部线程交错；这些不是外部代理、吞吐或全扫描内存上限验收。
+
+## 目录扫描并发回归
+
+```sh
+go test -race ./dirscan -count=5
+```
+
+通过 fake engine 与 channel 屏障验证实际重叠、并发上限、慢队首下的有界重排、按派发顺序去重、取消/deadline 后等待在途退出与部分结果保留、错误阈值、Crawl/递归边界及正文计数过滤；不依赖外部目标，也不关闭生产拨号保护。测试证明 worker/协调器契约，不证明真实网络同主机吞吐或性能收益。配置与并发压力变化见 [目录扫描](../dirscan/README.md)。
 
 ## 集成测试
 

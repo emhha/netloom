@@ -1,0 +1,36 @@
+goos: linux
+goarch: amd64
+pkg: github.com/emhha/netloom/passive/plugins
+cpu: AMD Ryzen 7 6800H with Radeon Graphics         
+BenchmarkSerializationPipeline/json-response/linear-4         	      26	  42882214 ns/op	   24803 B/op	     218 allocs/op
+BenchmarkSerializationPipeline/json-response/linear-4         	      24	  45363476 ns/op	   11050 B/op	     217 allocs/op
+BenchmarkSerializationPipeline/json-response/linear-4         	      26	  43770010 ns/op	   10781 B/op	     216 allocs/op
+BenchmarkSerializationPipeline/json-response/AC-4             	     258	   4681084 ns/op	   11232 B/op	     218 allocs/op
+BenchmarkSerializationPipeline/json-response/AC-4             	     231	   5017642 ns/op	   11480 B/op	     218 allocs/op
+BenchmarkSerializationPipeline/json-response/AC-4             	     224	   5153623 ns/op	   10757 B/op	     218 allocs/op
+BenchmarkSerializationPipeline/form-base64/linear-4           	    6805	    173904 ns/op	    6257 B/op	     112 allocs/op
+BenchmarkSerializationPipeline/form-base64/linear-4           	    5868	    176609 ns/op	    6232 B/op	     112 allocs/op
+BenchmarkSerializationPipeline/form-base64/linear-4           	    6685	    190836 ns/op	    6227 B/op	     112 allocs/op
+BenchmarkSerializationPipeline/form-base64/AC-4               	   31728	     36504 ns/op	    6128 B/op	     113 allocs/op
+BenchmarkSerializationPipeline/form-base64/AC-4               	   28632	     39526 ns/op	    6151 B/op	     113 allocs/op
+BenchmarkSerializationPipeline/form-base64/AC-4               	   31612	     36867 ns/op	    6141 B/op	     113 allocs/op
+BenchmarkSerializationPipeline/binary-response/linear-4       	      24	  45158770 ns/op	   11207 B/op	      16 allocs/op
+BenchmarkSerializationPipeline/binary-response/linear-4       	      25	  46343151 ns/op	   14333 B/op	      17 allocs/op
+BenchmarkSerializationPipeline/binary-response/linear-4       	      25	  49253750 ns/op	    6232 B/op	      16 allocs/op
+BenchmarkSerializationPipeline/binary-response/AC-4           	     328	   4034979 ns/op	    1562 B/op	      16 allocs/op
+BenchmarkSerializationPipeline/binary-response/AC-4           	     367	   3520806 ns/op	    1142 B/op	      16 allocs/op
+BenchmarkSerializationPipeline/binary-response/AC-4           	     304	   3794432 ns/op	    1126 B/op	      16 allocs/op
+BenchmarkSerializationAnalyze/64KiB-dense/linear-4            	      36	  30138922 ns/op	   23194 B/op	     210 allocs/op
+BenchmarkSerializationAnalyze/64KiB-dense/linear-4            	      49	  30388737 ns/op	   15544 B/op	     208 allocs/op
+BenchmarkSerializationAnalyze/64KiB-dense/linear-4            	      37	  27282969 ns/op	   13139 B/op	     207 allocs/op
+BenchmarkSerializationAnalyze/64KiB-dense/AC-4                	      58	  20109470 ns/op	   16142 B/op	     211 allocs/op
+BenchmarkSerializationAnalyze/64KiB-dense/AC-4                	      60	  20423139 ns/op	   14206 B/op	     210 allocs/op
+BenchmarkSerializationAnalyze/64KiB-dense/AC-4                	      51	  20879944 ns/op	   16520 B/op	     211 allocs/op
+BenchmarkSerializationAnalyze/64KiB-nohit/linear-4            	      36	  31752954 ns/op	   21361 B/op	     240 allocs/op
+BenchmarkSerializationAnalyze/64KiB-nohit/linear-4            	      34	  36274267 ns/op	   14750 B/op	     239 allocs/op
+BenchmarkSerializationAnalyze/64KiB-nohit/linear-4            	      32	  32302558 ns/op	   11241 B/op	     239 allocs/op
+BenchmarkSerializationAnalyze/64KiB-nohit/AC-4                	     525	   2297739 ns/op	   11357 B/op	     240 allocs/op
+BenchmarkSerializationAnalyze/64KiB-nohit/AC-4                	     529	   2220516 ns/op	   11402 B/op	     240 allocs/op
+BenchmarkSerializationAnalyze/64KiB-nohit/AC-4                	     492	   2271379 ns/op	   11419 B/op	     240 allocs/op
+PASS
+ok  	github.com/emhha/netloom/passive/plugins	35.258s

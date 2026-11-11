@@ -241,7 +241,7 @@ func ParseCurl(command string) (RequestInput, error) {
 				return in, errors.New("curl max-redirs must be 1–20")
 			}
 		default:
-			return in, fmt.Errorf("unsupported curl option %s; proxy/certificates/files must use caller configuration or structured request fields", arg)
+			return in, errors.New("unsupported curl option; proxy/certificates/files must use caller configuration or structured request fields")
 		}
 	}
 	if compressed && len(in.HeaderValues["Accept-Encoding"]) == 0 {

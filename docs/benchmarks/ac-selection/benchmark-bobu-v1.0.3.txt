@@ -1,0 +1,46 @@
+goos: linux
+goarch: amd64
+pkg: ac-evaluation
+cpu: AMD Ryzen 7 6800H with Radeon Graphics         
+BenchmarkScan/information/256KiB-nohit/Bobu-Walk-4             	     160	    727704 ns/op	 360.23 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Bobu-Walk-4             	     114	   1019152 ns/op	 257.22 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/256KiB-nohit/Bobu-Walk-4             	     124	    955787 ns/op	 274.27 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Bobu-Walk-4               	    9030	     13933 ns/op	 293.98 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Bobu-Walk-4               	   10125	     11476 ns/op	 356.90 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/4KiB-nohit/Bobu-Walk-4               	    8796	     13158 ns/op	 311.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Bobu-Walk-4              	     549	    195980 ns/op	 334.40 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Bobu-Walk-4              	     604	    208039 ns/op	 315.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-dense/Bobu-Walk-4              	     673	    176845 ns/op	 370.58 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Bobu-Walk-4              	     496	    256035 ns/op	 255.97 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Bobu-Walk-4              	     687	    212583 ns/op	 308.28 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-nohit/Bobu-Walk-4              	     634	    221801 ns/op	 295.47 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Bobu-Walk-4             	     558	    200670 ns/op	 326.59 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Bobu-Walk-4             	     662	    170312 ns/op	 384.80 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/information/64KiB-sparse/Bobu-Walk-4             	     694	    196832 ns/op	 332.95 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk-4           	     156	    929181 ns/op	 282.12 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk-4           	     160	    734060 ns/op	 357.12 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/256KiB-nohit/Bobu-Walk-4           	     123	   1010253 ns/op	 259.48 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk-4             	   10000	     14862 ns/op	 275.59 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk-4             	    9734	     15198 ns/op	 269.50 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/4KiB-nohit/Bobu-Walk-4             	   10000	     13428 ns/op	 305.04 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Bobu-Walk-4            	     734	    202548 ns/op	 323.56 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Bobu-Walk-4            	     650	    192925 ns/op	 339.70 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-dense/Bobu-Walk-4            	     555	    191737 ns/op	 341.80 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk-4            	     636	    208313 ns/op	 314.60 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk-4            	     573	    234126 ns/op	 279.92 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-nohit/Bobu-Walk-4            	     424	    236175 ns/op	 277.49 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk-4           	     597	    189065 ns/op	 346.63 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk-4           	     594	    200479 ns/op	 326.90 MB/s	       0 B/op	       0 allocs/op
+BenchmarkScan/serialization/64KiB-sparse/Bobu-Walk-4           	     598	    190746 ns/op	 343.58 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Bobu-Walk-4                  	    2346	     56923 ns/op	1151.32 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Bobu-Walk-4                  	    1465	     70459 ns/op	 930.13 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/information/Bobu-Walk-4                  	    1809	     57289 ns/op	1143.96 MB/s	       1 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Bobu-Walk-4                	    2047	     57935 ns/op	1131.20 MB/s	       0 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Bobu-Walk-4                	    2078	     61720 ns/op	1061.83 MB/s	       1 B/op	       0 allocs/op
+BenchmarkParallelScan/serialization/Bobu-Walk-4                	    2092	     54173 ns/op	1209.76 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBuild/information/Bobu-Walk-4                         	     441	    247232 ns/op	  411475 B/op	     512 allocs/op
+BenchmarkBuild/information/Bobu-Walk-4                         	     456	    257793 ns/op	  411475 B/op	     512 allocs/op
+BenchmarkBuild/information/Bobu-Walk-4                         	     566	    258243 ns/op	  411473 B/op	     512 allocs/op
+BenchmarkBuild/serialization/Bobu-Walk-4                       	     100	   1360963 ns/op	 1712085 B/op	    2148 allocs/op
+BenchmarkBuild/serialization/Bobu-Walk-4                       	      90	   1481078 ns/op	 1712104 B/op	    2148 allocs/op
+BenchmarkBuild/serialization/Bobu-Walk-4                       	     100	   1655107 ns/op	 1712092 B/op	    2148 allocs/op

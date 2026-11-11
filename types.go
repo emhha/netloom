@@ -130,7 +130,11 @@ type Handler func(c *Context) error
 
 // Task pairs a Request with the Pipeline that processes its Response.
 type Task struct {
-	Req      *Request
+	Req *Request
+	// Mutators run once, in order, on a request copy before host admission,
+	// validation and retries. Pipeline remains response-only. Mutators shared
+	// by concurrent tasks must be safe for concurrent use.
+	Mutators []Mutator
 	Pipeline []Handler
 	Meta     map[string]any
 }
@@ -140,7 +144,9 @@ type Result struct {
 	Ctx *Context
 }
 
-// Mutator rewrites a Request before it is sent. Adapt with AsMutator.
+// Mutator rewrites a Request before it is sent. Use Task.Mutators for Run;
+// AsMutator is only for standalone contexts that have not received a response.
+// Mutators must not retain or asynchronously modify the supplied request.
 type Mutator interface {
 	Mutate(req *Request) error
 }

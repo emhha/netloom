@@ -49,7 +49,10 @@ func (e *QuakeEngine) ConvertQuery(query string) string {
 
 // Search 调用 Quake API 执行查询，分页拉取至 limit，按源限流（1 req/s）。
 func (e *QuakeEngine) Search(ctx context.Context, query string, limit int) ([]Result, error) {
-	apiKey := readKey(ctx, e.secrets, "quake_key")
+	apiKey, err := readKey(ctx, e.secrets, "quake_key")
+	if err != nil {
+		return nil, err
+	}
 	if apiKey == "" {
 		return nil, ErrEngineNotConfigured
 	}

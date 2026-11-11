@@ -113,10 +113,25 @@ func (c *Context) run() error {
 	return c.emitErr
 }
 
-// AsMutator adapts a Mutator into a Handler. It rewrites the request, then
-// descends into the rest of the chain.
+// ErrMutatorAfterSend reports an attempt to rewrite an already sent request.
+var ErrMutatorAfterSend = fmt.Errorf("netloom: request mutators must run before sending")
+
+// AsMutator adapts a Mutator for a standalone, pre-send Context. It rejects
+// contexts with a Response without modifying the request.
+//
+// Deprecated: use Task.Mutators for scheduled requests. Task.Pipeline runs only
+// after sending and therefore cannot apply request mutations to the wire.
 func AsMutator(m Mutator) Handler {
 	return func(c *Context) error {
+		if c.Resp != nil {
+			return ErrMutatorAfterSend
+		}
+		if c.Req == nil {
+			return ErrNilRequest
+		}
+		if m == nil {
+			return fmt.Errorf("netloom.AsMutator: nil mutator")
+		}
 		if err := m.Mutate(c.Req); err != nil {
 			return fmt.Errorf("netloom.AsMutator: %w", err)
 		}

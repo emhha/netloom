@@ -92,6 +92,10 @@ func (t *tlsTransport) guardDialer() func(ctx context.Context, network, addr str
 // buildClient constructs an immutable-config client, leased to one request at
 // a time. Connection evidence is recorded per request, never in a client closure.
 func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_client.HttpClient, error) {
+	proxyURL, proxyErr := parseProxy(req.Proxy)
+	if proxyErr != nil {
+		return nil, proxyErr
+	}
 	guard := mappedDialContext(t.guardDialer(), t.resolver, t.noGuard)
 	dialCapture := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, err := guard(ctx, network, addr)
@@ -155,11 +159,15 @@ func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_cl
 		// its response. Use only WithDialContext for this case: tls-client rejects
 		// combining it (or a proxy factory) with WithProxyUrl. The request/key
 		// retain the actual proxy URL; this private client never exports GetProxy.
-		if u, err := url.Parse(req.Proxy); err == nil && u.Scheme == "http" {
+		if proxyURL.Scheme == "http" {
 			dialer := &httpProxyContextDialer{proxyURL: req.Proxy}
 			opts = append(opts, tls_client.WithDialContext(scope.wrapDial(dialer.DialContext)))
 		} else {
-			opts = append(opts, tls_client.WithProxyUrl(req.Proxy))
+			// Give the dependency an explicit default port, including bracketed IPv6.
+			if proxyURL.Port() == "" {
+				proxyURL.Host = net.JoinHostPort(proxyURL.Hostname(), "443")
+			}
+			opts = append(opts, tls_client.WithProxyUrl(proxyURL.String()))
 		}
 	} else {
 		opts = append(opts, tls_client.WithDialContext(scope.wrapDial(dialCapture)))
@@ -171,6 +179,9 @@ func (t *tlsTransport) buildClient(req *Request, scope *clientDialScope) (tls_cl
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 	if err != nil {
+		if proxyURL != nil {
+			return nil, ErrInvalidProxy
+		}
 		return nil, fmt.Errorf("netloom.tlsTransport: new client: %w", err)
 	}
 	return client, nil
@@ -208,6 +219,9 @@ func (t *tlsTransport) doRequest(client tls_client.HttpClient, req *Request, hre
 }
 
 func (t *tlsTransport) RoundTrip(ctx context.Context, req *Request) (*Response, error) {
+	if err := validateProxy(req); err != nil {
+		return nil, err
+	}
 	timeout := req.Timeout
 	if timeout <= 0 {
 		timeout = dialTimeout
@@ -358,6 +372,9 @@ func newRawTransport(maxBody int) *rawTransport {
 }
 
 func (t *rawTransport) RoundTrip(ctx context.Context, req *Request) (_ *Response, returnErr error) {
+	if err := validateProxy(req); err != nil {
+		return nil, err
+	}
 	if req.Proxy != "" {
 		if _, err := withNetworkOptions(ctx, req); err != nil {
 			return nil, err
