@@ -346,3 +346,28 @@ GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ./...
 中间 IPv6 Raw 回归因测试 fixture 未设置 Raw 私有 noGuard 而正确被生产地址保护拒绝；补齐仅受控本机测试的配置后通过，生产拨号保护未放宽。独立只读复核未发现运行路径、池身份或文档边界不一致。
 
 范围限制：仅绑定直连目标 TCP，不绑定 DNS resolver，不支持代理组合或源端口选择；不提权、不配置系统接口/路由、不监控或动态迁移已有 socket。当前环境允许 SO_BINDTODEVICE，未在另一个无权限进程中实测 EPERM/EACCES；接口重命名/删除/同名重建及 NAT 的持续行为仍由内核决定，不作跨环境保证。未执行远端目标/代理、外部 Cookie 服务或性能验收；测试中的环境跳过必须单列，不能视为验证通过。完整契约见 [绑定指南](NETWORK-BINDING.md)。
+
+## 2026-11-14：HTTP 错误分类与单行展示
+
+工具链 Go 1.26.3 linux/amd64、Python 3.14.8。默认 `GOCACHE` 在当前只读环境下不可写，以下 Go 命令显式使用可写的 `/tmp/netloom-gocache`，未修改全局 Go 配置。执行并通过：
+
+```sh
+GOCACHE=/tmp/netloom-gocache go test -race . -run '^(TestClassify|TestMessage)' -count=5
+GOCACHE=/tmp/netloom-gocache make check
+GOCACHE=/tmp/netloom-gocache make race
+GOCACHE=/tmp/netloom-gocache make integration-compile
+GOCACHE=/tmp/netloom-gocache GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
+GOCACHE=/tmp/netloom-gocache GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ./...
+git diff --check
+```
+
+- 新分类/展示测试以 race 连续 5 轮通过（根包 1.931s）。
+- `make check`：格式、仓库/文档检查、19 个 Python 离线测试、50 个固定字典文件校验、全包默认测试、vet 和 build 通过；根包 18.840s，追加本记录后复跑为 16.983s。
+- `make race`：全包通过，根包 21.943s，无已报告数据竞争。
+- `make integration-compile`：所有带 integration tag 的测试编译通过。
+- Windows/Darwin amd64 生产包交叉构建通过；只证明编译，不代表这些平台已运行测试。
+- Go 命令输出过模块缓存 stat 写入只读的提示；模块内容读取和构建/测试结果不受影响，改用可写 `GOCACHE` 后其余步骤正常完成。
+
+覆盖要点：本地 `httptest`、真实监听器、失败 resolver 与可控拨号覆盖 DNS 失败、拒绝连接、连接超时、证书不可信、TLS 握手失败、response_header 超时、正文空闲超时、正文读取中断、`*net/http.MaxBytesError`、重定向超限、地址阻断、非法代理和已关闭 Engine；断言 `Classify` 的 kind/phase/timeout 与优先级，以及 `Message` 单行、无 `netloom: ` 前缀、保留 Phase、不回显代理凭据。另检查 nil、普通未证明错误、调用方取消不被猜测成 body/TLS 失败、多行/包装 sentinel 的清理。既有全包测试和 race 同时通过，`Error()` 文本、sentinel、`Timeout()` 与 `errors.Is/As` 未改动。
+
+范围限制：内建缓冲正文超过 `MaxBodySize` 仍是截断加 `Response.BodyTruncated`，不是 error，因此 `body_limit` 只覆盖错误链中实际出现的 `*net/http.MaxBytesError`（例如自定义 transport），没有为截断新增运行时错误。分类依赖错误链中的类型/sentinel 证据；未证明的 connect/request/header 非超时失败仍为 `unknown`。未执行外部目标/代理、外部 Cookie 服务或性能验收。

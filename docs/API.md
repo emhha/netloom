@@ -141,6 +141,36 @@ req := &netloom.Request{
 
 网络/正文失败可用 `errors.As(err, &phaseError)` 取得 `*PhaseError`。`Phase` 为 `pool`、`connect`、`tls`、`request`、`response_header`、`body` 或 `total`，标识观察到失败的操作，不推断未观测的根因。阶段/Total 期限满足 `errors.Is(err, context.DeadlineExceeded)` 和 `net.Error.Timeout()`；调用方取消仍满足 `errors.Is(err, context.Canceled)`，in-flight 的自定义取消 cause 也保留。底层地址阻止、TLS 验证等错误继续可用 errors.Is/As 判断；参数/排队错误不承诺一定有 PhaseError。错误包装不附加 URL 或凭据，但不对底层错误文本做脱敏；不得直接将含秘密的错误持久化或展示。
 
+### 错误分类与展示
+
+`Classify(err) (kind ErrorKind, phase Phase, timeout bool)` 提供稳定的粗分类，供展示和调用方策略使用。它先用 `errors.As` 取 `*PhaseError` 的 Phase，再检查完整错误链；不新增、不替换、不吞掉原错误，`errors.Is/As` 仍作用于原始错误。`ErrorKind` 至少包括：
+
+| Kind | 判定依据 |
+| --- | --- |
+| `dns` | 错误链含 `*net.DNSError`；DNS 超时仍归此类，`timeout` 为 true |
+| `connect_refused` | 错误链含 `syscall.ECONNREFUSED` |
+| `connect_timeout` | connect 阶段且证明为超时，非 DNS |
+| `tls_verify` | `x509.UnknownAuthorityError`、`x509.CertificateInvalidError`、`x509.HostnameError`、`x509.SystemRootsError` 或 TLS 验证包装错误 |
+| `tls_handshake` | tls 阶段的其他失败，包括 record-header/alert/连接中断 |
+| `proxy` | `ErrInvalidProxy` 或 `ErrNetworkProxyUnsupported` |
+| `blocked_address` | `ErrBlockedAddress` |
+| `redirect_limit` | `ErrRedirectLimit` |
+| `response_header_timeout` | response_header 阶段且证明为超时 |
+| `body_read` | body 阶段的其他读取失败 |
+| `body_timeout` | body 阶段且证明为超时（BodyIdle） |
+| `body_limit` | 错误链含 `*net/http.MaxBytesError` |
+| `auth_unsupported` | `ErrAuthUnsupported` |
+| `http2_unavailable` | `ErrHTTP2Unavailable` |
+| `queue_full` | `ErrQueueFull` |
+| `engine_closed` | `ErrEngineClosed` |
+| `invalid_request` | `ErrNilRequest`、`ErrBodyNotReplayable`、`ErrUploadLength`、`ErrAuthOptions`、`ErrMutatorAfterSend`、绑定/TLS 选项校验 sentinel 等明确输入错误 |
+| `timeout` | 证明为超时但不属于上述阶段专用种类 |
+| `unknown` | 错误链不足以证明更具体种类；不是“确定未知原因” |
+
+判定只使用标准库/显式 sentinel 证据，不根据文本猜测；调用方取消且无 deadline 视为 `unknown`。内建缓冲正文超过 `MaxBodySize` 时仍只截断并以 `Response.BodyTruncated` 表示，不会因该截断新增错误，因此 `body_limit` 只覆盖错误链中实际出现的 `*net/http.MaxBytesError`。
+
+`Message(err) string` 返回面向展示的单行文本：去掉开头库名前缀和已知内部包装前缀，换行替换为 `"; "`，保留 Phase（如 `connect: ...`），不截断长度，nil 返回空字符串。它只清理既有错误文本，不追加 URL、请求头、正文或凭据；对包外自定义 transport 自行携带的秘密不做通用脱敏，调用方仍需按数据敏感级别决定是否展示。分类与展示均不改变重试、重定向、超时或连接复用行为。
+
 例如，在保留既有单次 Timeout 的同时为多次尝试提供预算：
 
 ```go

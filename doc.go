@@ -12,6 +12,10 @@
 // Direct dialing rejects loopback, unspecified, and link-local addresses but
 // allows private networks; callers remain responsible for target authorization.
 //
+// Transport failures can be classified with Classify and rendered as a
+// single-line summary with Message. Both are observational and preserve the
+// original error chain.
+//
 // Offline snapshots and analysis, scanning extensions, API-query clients, and
 // MITM primitives live in separate subpackages. The runtime does not provide
 // credential storage, business persistence, an HTTP service, or a user interface.

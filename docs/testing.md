@@ -52,6 +52,14 @@ go test -race . ./nethttp -run 'Test(Phase|BuildRequestPhase|ConnectionPoolStale
 
 本地 H1/H2/严格 H2 覆盖 POST 后完整响应头超时、103/不完整最终响应头、部分正文 idle 失败与流式 Status、调用方暂停消费不误计 idle、持续进展的正文不被固定 body 时长截断、TLS stall（含大写 HTTPS scheme）、真实过期 H2 重新握手、CONNECT 阻塞后的 socket 关闭与池容量释放。另测连接复用不重新计算 TLS 预算、晚到 WroteRequest 不复活已结束的 header timer、整组策略继承/显式零覆盖、负值和毫秒换算溢出、调用方提前 deadline/取消 cause、Raw TLS/header/body/部分响应，以及 Total 跨重试和 Do 多跳不重置。Connect 的模拟拨号用例检查依赖 Background context 被当前 lease ctx 替换；真实 socket 取消由 TLS/CONNECT 用例检查，不依赖不可控外网黑洞地址。这不是精确 TLS 握手时长、外部代理、浏览器等价性或性能验收。
 
+## 错误分类与展示回归
+
+```sh
+go test -race . -run '^(TestClassify|TestMessage)' -count=5
+```
+
+本地 `httptest`、真实监听器和可控拨号覆盖 DNS 失败、拒绝连接、连接超时、证书不可信、TLS 握手失败、响应头超时、正文空闲超时、正文读取中断、`*net/http.MaxBytesError` 大小限制、重定向超限、地址阻断、非法代理与 Engine 已关闭。断言 `Classify` 的 kind/phase/timeout，以及 `Message` 单行、无库名前缀、无凭据；分类只用类型/sentinel 证据，不按文本猜测。内建正文上限仍表现为截断而非错误，因此大小限制用例检查可分类的 `*http.MaxBytesError` 链。
+
 ## 直连映射与地址族回归
 
 ```sh
