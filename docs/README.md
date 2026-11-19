@@ -28,6 +28,7 @@
 
 ## 包与资源
 
+- [HTTP 流量分析](../traffic/README.md)：主动请求、MITM、代理覆盖与共用被动插件。
 - [HTTP API 会话](../httpclient/README.md)：API 重试、限流、代理和 TLS 策略。
 - [测绘数据源](../mapping/README.md)：FOFA、Hunter、Quake 适配与凭据接口。
 - [企业信息](../enterprise/README.md)：企业数据源接口与 Aiqicha 适配。

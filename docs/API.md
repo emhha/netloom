@@ -321,4 +321,6 @@ mitm.New(authority, backend, Options{Username, Password, Realm}) 返回 http.Han
 Backend 提供 CheckTarget 和 RoundTrip；转发证书与目标策略由 Backend 决定。Proxy.Close 关闭 CONNECT 连接；HTTP Server 生命周期由调用方管理。
 ObserveBody 在 Close 时回调有界证据及截断状态，必须提供非 nil 回调。证据回调、私钥持久化和审计均属调用方责任。
 
+使用 [traffic](../traffic/README.md) 可以给主动发送和 MITM 接入同一份 `passive.Registry`，显式配置共享代理和按入口覆盖，并独立交付分析报告。
+
 geoip.New(dataDir, ...Option) 显式选择数据目录，Init(ctx) 只读本地 City/ASN/Country MMDB 或 CDN JSON；无资源返回 ErrNoData。Lookup/LookupBatch 保留 IPInfo 模型；Close 幂等并保护并发读取。Update(ctx, ...DataSource) 才会下载，必须提供文件名及 URL；可 WithHTTPClient 指定网络策略。无隐式用户目录或七天更新行为，详见 [GeoIP 说明](../geoip/README.md)。

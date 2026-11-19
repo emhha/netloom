@@ -10,6 +10,7 @@ passive/plugins ─────────────────────�
 fingerprint / infoextract / passive ────> httpdata
 infoextract / passive/plugins ──────────> ac
 httpdata/netloomdata ───────────────────> netloom + httpdata
+traffic ───────────────────────────────> netloom + mitm + passive + httpdata/netloomdata
 mapping / enterprise ──────────────────> httpclient
 geoip / mitm ──────────────────────────> 标准库与各自外部依赖
 ```
@@ -28,6 +29,7 @@ geoip / mitm ──────────────────────�
 | `httpdata/` | 离线证据模型；`netloomdata/` 是运行时复制适配器 |
 | `ac/` | 公共字节串 Aho-Corasick 匹配引擎，不依赖 HTTP 模型或运行时 |
 | `fingerprint/`、`infoextract/`、`passive/` | 离线分析；内置插件在 `passive/plugins/` |
+| `traffic/` | 组合主动请求和 MITM，解析入口代理，采集证据并调度调用方选择的插件 |
 | `probe/`、`dirscan/` | 主动探测；授权和任务持久化归调用方 |
 | `nethttp/`、`mitm/`、`geoip/` | 请求转换、代理原语、本地 IP 信息 |
 | `httpclient/`、`mapping/`、`enterprise/` | API 会话与数据源适配 |

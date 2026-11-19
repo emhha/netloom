@@ -4,6 +4,8 @@
 
 ### 公开导入路径
 
+新增 `github.com/emhha/netloom/traffic`。调用方可以通过其主动发送入口、Run 任务适配和 MITM 后端接入同一 Registry，并选择共享或独立的上游代理。默认正文采集上限为每方向 128 KiB，异步等待队列容量为 32，分析 context 超时为 5 秒。原生 Engine、MITM 和插件接口继续可用。见 [HTTP 流量分析](../traffic/README.md)。
+
 统一使用 module `github.com/emhha/netloom`，根包标识符为 `netloom`，子包位于同一 module 下。使用早期裸路径 `netloom` 的代码应更新 module 依赖及导入路径，例如：
 
 ```go
