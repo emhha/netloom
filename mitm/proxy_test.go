@@ -174,6 +174,73 @@ func TestHTTPSConnectDecryptsAndRestrictsTunnel(t *testing.T) {
 	}
 }
 
+func TestHTTPSConnectReusesTunnelWithLiveUpstreamContext(t *testing.T) {
+	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "upstream response")
+	}))
+	t.Cleanup(origin.Close)
+	target, err := url.Parse(origin.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err := NewAuthority()
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := New(ca, reuseBackend{target.Host, origin.Client().Transport}, Options{})
+	var tunnels atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodConnect {
+			tunnels.Add(1)
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(proxy.Close)
+	proxyURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust := x509.NewCertPool()
+	if !trust.AppendCertsFromPEM(ca.CertificatePEM()) {
+		t.Fatal("cannot trust proxy CA")
+	}
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
+		Proxy: http.ProxyURL(proxyURL), TLSClientConfig: &tls.Config{RootCAs: trust}, MaxConnsPerHost: 1,
+	}}
+	t.Cleanup(client.CloseIdleConnections)
+	for i := range 3 {
+		resp, err := client.Get(origin.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil || resp.StatusCode != http.StatusOK || string(body) != "upstream response" {
+			t.Fatalf("request %d: status=%d body=%q err=%v", i+1, resp.StatusCode, body, err)
+		}
+	}
+	if got := tunnels.Load(); got != 1 {
+		t.Fatalf("opened %d CONNECT tunnels instead of reusing one", got)
+	}
+}
+
+type reuseBackend struct {
+	host      string
+	transport http.RoundTripper
+}
+
+func (b reuseBackend) CheckTarget(_ context.Context, u *url.URL) error {
+	if u.Scheme != "https" || u.Host != b.host {
+		return fmt.Errorf("out of scope")
+	}
+	return nil
+}
+
+func (b reuseBackend) RoundTrip(r *http.Request) (*http.Response, error) {
+	return b.transport.RoundTrip(r)
+}
+
 func TestAuthorityPersistsAndSignsIPCertificates(t *testing.T) {
 	ca, err := NewAuthority()
 	if err != nil {

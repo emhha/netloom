@@ -20,6 +20,10 @@ go test -race ./traffic -count=5
 
 本地 TLS 源站与两个 CONNECT 代理检查主动发送和解密式 MITM 共用代理、单次请求覆盖、压缩字节转发，以及主动请求在接入分析前后的 TLS 版本、密码套件和 ALPN。合成 JS 检查跨入口去重命中不重发旧发现、正文长度变更后重新分析，以及流式和 Run 路径的单次报告。离线缓存用例另外覆盖等长变化、截断长度未知和显式启用正文哈希。队列回归故意阻塞回调，检查超限时仍原样读取并可计数丢弃。用例只使用本机服务，不验证外部代理、浏览器指纹完全等价或真实目标的风控行为。
 
+完整调用示例用 `go run ./examples/traffic`，本机运行并显示两个入口的报告。独立运行 MITM 压力基准与解读指标，见 [流量性能记录](PERFORMANCE-traffic.md)。
+
+`go test ./mitm -run '^TestHTTPSConnectReusesTunnelWithLiveUpstreamContext$'` 验证真实客户端在一条 CONNECT 隧道内连续发送三次 HTTPS 请求，上游转发 context 在后续请求上仍可用。
+
 ## 代理失败关闭回归
 
 ```sh

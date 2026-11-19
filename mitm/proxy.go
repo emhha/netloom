@@ -1,7 +1,6 @@
 package mitm
 
 import (
-	"bufio"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -127,7 +126,11 @@ func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 	if err := buffered.Flush(); err != nil {
 		return
 	}
-	tlsConn := tls.Server(&bufferedConn{Conn: conn, reader: buffered.Reader}, &tls.Config{
+	// Preserve bytes already read before Hijack. Once those bytes are used,
+	// read directly from the tunnel. The outer HTTP reader can cancel the
+	// CONNECT context when the inner server interrupts a pending read.
+	bufferedPrefix := io.LimitReader(buffered.Reader, int64(buffered.Reader.Buffered()))
+	tlsConn := tls.Server(&bufferedConn{Conn: conn, reader: io.MultiReader(bufferedPrefix, conn)}, &tls.Config{
 		MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"},
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			if hello.ServerName != "" && !strings.EqualFold(hello.ServerName, u.Hostname()) {
@@ -243,7 +246,7 @@ func (p *Proxy) Close() {
 
 type bufferedConn struct {
 	net.Conn
-	reader *bufio.Reader
+	reader io.Reader
 }
 
 func (c *bufferedConn) Read(b []byte) (int, error) { return c.reader.Read(b) }

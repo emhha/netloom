@@ -23,6 +23,8 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 ### 默认值与可见行为
 
+- 修复 HTTPS MITM 复用 CONNECT 隧道时后续请求因上游 context 提前取消而返回 `502` 的问题。MITM 保留接管前已预读的字节，后续直接从隧道读取。
+
 - 信息提取插件版本 `"5"` 默认按项目、会话、URL、媒体类型和长度去重。重复正文或响应头只报告命中，不重发旧的发现；需要识别等长正文变化时可启用 `HashBodyForCache`。`passive.New` 继续返回缓存结果，新增 `passive.NewDeduplicating` 可为有缓存键的插件选择只跳过的行为。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
 
 - **API 会话默认不重试具副作用方法**：`httpclient.Options.RetryMethods` 为 nil 仅允许 GET/HEAD/OPTIONS，非 nil 空列表不重试任何方法；构造时复制，按大写方法精确匹配。旧默认会重试 POST/PATCH 的调用方须重新确认业务可重入性，再显式加入列表，并保证正文可重放。一次性流即便方法获准也只发送一次；DisableRetries/负 RetryMax 仍优先，RetryMax 为 0 仍表示默认最多三次重试。根包 RetryPolicy 的显式 opt-in 语义不变。付费 GET 仍建议禁重试，此变化不提供 exactly-once 保证。

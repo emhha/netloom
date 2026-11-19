@@ -24,6 +24,7 @@
 - [验证记录](VALIDATION.md)：实际运行结果与未验证范围。
 - [性能记录](PERFORMANCE.md)：原生指纹的可复现测量。
 - [Serialization 性能](PERFORMANCE-serialization.md)：共享 Cloudflare AC 接入后的完整插件与文本分层测量。
+- [MITM 流量性能](PERFORMANCE-traffic.md)：转发吞吐、尾延迟和分析队列丢弃率。
 - [AC 库选型](AC-SELECTION.md)：信息提取/序列化预筛选的语义、并发、内存和实测比较。
 
 ## 包与资源

@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-11-19：可运行流量示例、CONNECT 复用和 MITM 压力基准
+
+Go 1.26.3 linux/amd64。`go run ./examples/traffic` 实际跑通 curl 导入、主动发送、HTTPS MITM 和共享代理。首次主动请求得到合成规则的发现，MITM 请求命中正文去重并跳过旧发现。
+
+初次压力运行在复用 CONNECT 隧道时返回 `502`，上游记录为 `context canceled`。真实网络回归在修复前稳定失败于第二次请求，切换到直接读取已接管的隧道连接后连续通过 20 次。用例断言三次请求都收到完整正文，且客户端只打开一条隧道。
+
+`BenchmarkMITMLoad` 的五种模式分别通过每模式三轮 1,000 次和三轮 10,000 次负载。另用 `-race -benchtime=100x -cpu=4` 运行五种模式，未报告数据竞争。精确复现命令、指标和覆盖限制见 [MITM 流量性能](PERFORMANCE-traffic.md)。`make check race integration-compile` 和 `git diff --check` 通过，集成目标仅编译。上述网络流量全部使用本机测试服务。
+
 ## 2026-11-19：序列化插件目录迁移
 
 Go 1.26.3 linux/amd64。`make check race integration-compile` 通过，集成目标仅编译。原有规则等价、扫描预算和结果测试在新包路径执行；旧类型别名和新构造函数由兼容性测试覆盖。仓库路径检查的 21 个 Python 离线测试通过。

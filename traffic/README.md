@@ -4,6 +4,8 @@
 
 ## 接入
 
+`go run ./examples/traffic` 可在本机运行主动请求、HTTPS MITM 和报告的[完整示例](../examples/README.md#流量分析示例)。不同插件组合对转发和报告的影响见 [MITM 流量性能](../docs/PERFORMANCE-traffic.md)。
+
 ```go
 registry, err := passive.New([]passive.Plugin{
     infoextract.New(),
