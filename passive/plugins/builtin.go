@@ -15,15 +15,18 @@ import (
 )
 
 type Information struct {
-	Extractor     *infoextract.InfoExtractor
-	CacheLimit    int
-	mu            sync.Mutex
-	cache         *passive.Registry
-	cacheIdentity uint64
+	Extractor  *infoextract.InfoExtractor
+	CacheLimit int
+	// HashBodyForCache uses content hashes instead of URL, media type and length.
+	HashBodyForCache bool
+	mu               sync.Mutex
+	cache            *passive.Registry
+	cacheIdentity    uint64
+	cacheUsesHash    bool
 }
 
 func (p *Information) Metadata() passive.Metadata {
-	return passive.Metadata{ID: "infoextract", Version: "4", Description: "正文按项目/会话/URL/内容去重，响应头独立提取敏感信息候选"}
+	return passive.Metadata{ID: "infoextract", Version: "5", Description: "正文默认按项目/会话/URL/内容类型/长度去重，响应头独立分析"}
 }
 func (p *Information) CacheKey(passive.Input) string { return "" }
 func (p *Information) Analyze(ctx context.Context, in passive.Input) (passive.Result, error) {
@@ -61,14 +64,14 @@ func (p *Information) registry() (*passive.Registry, error) {
 		return nil, fmt.Errorf("plugins.Information: extractor is required")
 	}
 	snapshot := p.Extractor.Snapshot()
-	if p.cache == nil || p.cacheIdentity != snapshot.Identity() {
-		cache, err := passive.New([]passive.Plugin{
-			informationPart{Snapshot: snapshot}, informationPart{Snapshot: snapshot, Headers: true},
+	if p.cache == nil || p.cacheIdentity != snapshot.Identity() || p.cacheUsesHash != p.HashBodyForCache {
+		cache, err := passive.NewDeduplicating([]passive.Plugin{
+			informationPart{Snapshot: snapshot, HashBody: p.HashBodyForCache}, informationPart{Snapshot: snapshot, Headers: true},
 		}, informationCacheLimit(p.CacheLimit))
 		if err != nil {
 			return nil, err
 		}
-		p.cache, p.cacheIdentity = cache, snapshot.Identity()
+		p.cache, p.cacheIdentity, p.cacheUsesHash = cache, snapshot.Identity(), p.HashBodyForCache
 	}
 	// Older in-flight calls retain their own registry. A generation change
 	// drops our reference rather than mutating plugins used by those calls.
@@ -78,6 +81,7 @@ func (p *Information) registry() (*passive.Registry, error) {
 type informationPart struct {
 	Snapshot infoextract.Snapshot
 	Headers  bool
+	HashBody bool
 }
 
 func (p informationPart) Metadata() passive.Metadata {
@@ -90,7 +94,10 @@ func (p informationPart) Metadata() passive.Metadata {
 
 func (p informationPart) CacheKey(in passive.Input) string {
 	if !p.Headers {
-		return passive.ContentKey(in.Site, in.SessionID, in.Request.URL, in.Response.ContentType, in.Response.Body)
+		if p.HashBody {
+			return passive.ContentKey(in.Site, in.SessionID, in.Request.URL, in.Response.ContentType, in.Response.Body)
+		}
+		return passive.ContentLengthKey(in)
 	}
 	data, _ := json.Marshal(struct {
 		Site, Session, URL, ContentType string

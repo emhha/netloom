@@ -59,18 +59,30 @@ type entry struct {
 }
 
 type Registry struct {
-	plugins map[string]Plugin
-	mu      sync.Mutex
-	cache   map[string]*entry
-	order   []string
-	limit   int
+	plugins      map[string]Plugin
+	mu           sync.Mutex
+	cache        map[string]*entry
+	order        []string
+	limit        int
+	skipFindings bool
 }
 
 func New(plugins []Plugin, cacheLimit int) (*Registry, error) {
+	return newRegistry(plugins, cacheLimit, false)
+}
+
+// NewDeduplicating remembers successful cache keys without retaining their
+// findings. A cache hit skips the plugin and reports CacheHit with no Artifacts
+// or Data. Plugins with empty keys and failed analyses continue to run.
+func NewDeduplicating(plugins []Plugin, cacheLimit int) (*Registry, error) {
+	return newRegistry(plugins, cacheLimit, true)
+}
+
+func newRegistry(plugins []Plugin, cacheLimit int, skipFindings bool) (*Registry, error) {
 	if cacheLimit == 0 {
 		cacheLimit = 128
 	}
-	r := &Registry{plugins: make(map[string]Plugin), cache: make(map[string]*entry), limit: cacheLimit}
+	r := &Registry{plugins: make(map[string]Plugin), cache: make(map[string]*entry), limit: cacheLimit, skipFindings: skipFindings}
 	for _, p := range plugins {
 		meta := p.Metadata()
 		if meta.ID == "" || meta.Version == "" {
@@ -186,7 +198,11 @@ func (r *Registry) analyze(ctx context.Context, p Plugin, in Input) Result {
 	}
 	if pending != nil {
 		r.mu.Lock()
-		pending.result = clone(result)
+		if r.skipFindings && result.Status == "completed" {
+			pending.result = Result{PluginID: result.PluginID, Version: result.Version, Status: result.Status, Truncated: result.Truncated}
+		} else {
+			pending.result = clone(result)
+		}
 		if result.Status == "completed" {
 			r.order = append(r.order, key)
 		} else {

@@ -18,11 +18,17 @@
 
 ## Information：规则更新与缓存
 
-`Information` 必须配置非 nil 的 `Extractor`；缺失时分析返回错误。插件元数据版本为字符串 `"4"`。`CacheKey` 为空，外层 Registry 不缓存其整体结果；插件内部仍按正文与响应头分别缓存，`CacheLimit=0` 使用内部默认容量 256，负数禁用内部结果缓存。
+`Information` 必须配置非 nil 的 `Extractor`；缺失时分析返回错误。插件元数据版本为字符串 `"5"`。`CacheKey` 为空，外层 Registry 每次调用它。插件内部对正文与响应头分别去重，`CacheLimit=0` 使用合计 256 条的默认容量，负数禁用去重。缓存只记完成标记。命中时跳过对应部分的提取，`body_cache_hit` 或 `header_cache_hit` 为 true，该部分不会再次报告旧发现。
 
-每次 `Analyze` 捕获同一份不可变 `infoextract.Snapshot`，同时用于正文、响应头的规则匹配。内部 Registry 按该快照的进程内唯一身份复用：任何成功的 `AddRule`（新增、替换或重复提交同名规则）及切换到不同的提取器实例都会淘汰当前代次缓存；失败的更新不会淘汰缓存。相同输入在新代次首次分析为 miss，之后可再次命中；同一代次内，正文与响应头的独立去重语义不变。
+正文默认按项目、会话、规范化 URL、媒体类型和长度去重，无需散列正文。完整响应使用实际交给插件的正文长度。截断的正文使用有效的 `Content-Length`、已采集长度和内容编码，和完整响应分别去重。截断且无法确定长度时继续分析。等长内容更新可能被略过。需要区分等长变化时，显式设置 `HashBodyForCache: true`，按采集字节计算哈希。响应头使用独立的缓存键，变化的头仍会检查。
 
-与更新重叠的在途调用允许按已经捕获的旧快照完成；它们持有独立的旧 Registry，不能写入新代次缓存。插件不永久保存历史代次；旧调用结束后其 Registry 即可回收。`Information` 支持并发分析和提取器的并发 `AddRule`；不要在使用后复制插件，也不要在分析期间并发改写其公开 `Extractor` / `CacheLimit` 字段。顺序替换 `Extractor` 后，下次分析会识别新的实例身份。
+每次 `Analyze` 捕获同一份不可变 `infoextract.Snapshot`，同时用于正文、响应头的规则匹配。成功的 `AddRule`（新增、替换或重复提交同名规则）、切换提取器实例或更改正文去重模式，都会清除先前的完成标记；失败的规则更新保留标记。
+
+与更新重叠的在途调用允许按旧快照完成，结束后其旧 Registry 即可回收。`Information` 支持并发分析和提取器的并发 `AddRule`。在使用前设置公开配置字段，分析期间保持配置不变。
+
+## 其他插件
+
+`Fingerprint` 以请求及响应证据（包括头、正文和状态码等）为键。使用 `passive.New` 时，命中就复用指纹结果。`Serialization` 的 `CacheKey` 为空，每次执行自己的有界检查。自定义插件通过 `CacheKey` 决定哪些输入可以复用。调用方可以选用 `passive.NewDeduplicating`，让有键的插件命中后只报告 `CacheHit`，不保留或重发旧的 `Artifacts` 或 `Data`。
 
 ## Serialization：离线格式线索
 

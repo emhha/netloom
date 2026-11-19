@@ -19,6 +19,8 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 ### 默认值与可见行为
 
+- `plugins.Information` 版本 `"5"` 默认按项目、会话、URL、媒体类型和长度去重。重复正文或响应头只报告命中，不重发旧的发现；需要识别等长正文变化时可启用 `HashBodyForCache`。`passive.New` 继续返回缓存结果，新增 `passive.NewDeduplicating` 可为有缓存键的插件选择只跳过的行为。见 [内置被动分析插件](../passive/plugins/README.md)。
+
 - **API 会话默认不重试具副作用方法**：`httpclient.Options.RetryMethods` 为 nil 仅允许 GET/HEAD/OPTIONS，非 nil 空列表不重试任何方法；构造时复制，按大写方法精确匹配。旧默认会重试 POST/PATCH 的调用方须重新确认业务可重入性，再显式加入列表，并保证正文可重放。一次性流即便方法获准也只发送一次；DisableRetries/负 RetryMax 仍优先，RetryMax 为 0 仍表示默认最多三次重试。根包 RetryPolicy 的显式 opt-in 语义不变。付费 GET 仍建议禁重试，此变化不提供 exactly-once 保证。
 - **凭据读取错误不再伪装成未配置**：mapping/enterprise 现在包装 SecretReader.Get 的非 nil 错误，可 errors.Is 判断底层取消、超时或存储故障；即使同时返回字节也不发送请求。只有 nil 读取器或无错误的空/空白必需值使用原有 ErrEngineNotConfigured/ErrNotConfigured。FOFA 的可选 fofa_email 读取故障同样失败，key/email 每次 Search 在分页前各读取一次；爱企查将纯空白 Cookie 视为未配置。此前统一捕获“未配置”的调用方应分别处理存储失败与配置缺失。
 

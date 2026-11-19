@@ -78,3 +78,35 @@ func TestFailureIsNotCachedAndUnknownPluginRejected(t *testing.T) {
 		t.Fatal("reserved plugin should not execute")
 	}
 }
+
+func TestDeduplicatingRegistrySkipsWithoutRetainingFindings(t *testing.T) {
+	p := &countingPlugin{}
+	r, err := NewDeduplicating([]Plugin{p}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{Request: &httpdata.Request{URL: "https://example.test/app"},
+		Response: &httpdata.Response{Body: []byte("fixture")}}
+	first, err := r.Analyze(t.Context(), in, nil)
+	if err != nil || first[0].CacheHit || len(first[0].Artifacts) != 1 {
+		t.Fatalf("first analysis: %+v %v", first, err)
+	}
+	for _, cached := range r.cache {
+		if len(cached.result.Artifacts) != 0 || len(cached.result.Data) != 0 {
+			t.Fatal("deduplication retained findings")
+		}
+	}
+	second, err := r.Analyze(t.Context(), in, nil)
+	if err != nil || !second[0].CacheHit || len(second[0].Artifacts) != 0 || p.count.Load() != 1 {
+		t.Fatalf("duplicate analysis: %+v %v", second, err)
+	}
+	in.Request.URL = "https://example.test/other"
+	if _, err := r.Analyze(t.Context(), in, nil); err != nil {
+		t.Fatal(err)
+	}
+	in.Request.URL = "https://example.test/app"
+	afterEviction, err := r.Analyze(t.Context(), in, nil)
+	if err != nil || afterEviction[0].CacheHit || p.count.Load() != 3 {
+		t.Fatalf("evicted analysis: %+v %v", afterEviction, err)
+	}
+}

@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -136,6 +137,7 @@ func TestInformationPinsRegistryAcrossUpdatesAndExtractorInstances(t *testing.T)
 		t.Fatal(err)
 	}
 	// The previous registry remains immutable, not only its cache identity.
+	in.Request.URL += "/fresh"
 	results, err := newCache.Analyze(context.Background(), in, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -172,10 +174,20 @@ func TestInformationConcurrentRuleUpdatesKeepOneGeneration(t *testing.T) {
 			defer wg.Done()
 			<-start
 			for i := 0; i < 100; i++ {
-				got, err := p.Analyze(context.Background(), in)
+				input := in
+				request := *in.Request
+				request.URL = fmt.Sprintf("%s/%d/%d", request.URL, worker, i)
+				input.Request = &request
+				got, err := p.Analyze(context.Background(), input)
 				if err != nil || len(got.Artifacts) != 2 || got.Artifacts[0].Value != got.Artifacts[1].Value {
 					t.Errorf("inconsistent body/header snapshot: %+v %v", got, err)
 					return
+				}
+				for _, artifact := range got.Artifacts {
+					if artifact.Value != "old-value" && artifact.Value != "new-value" {
+						t.Errorf("unexpected rule value: %+v", artifact)
+						return
+					}
 				}
 			}
 		}()

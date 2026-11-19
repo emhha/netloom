@@ -297,7 +297,7 @@ EHole/FingerprintHub 的 AC、图标及正则字面量索引在 New 时构建，
 webfinger.go 提供独立 WebfingerMatcher、LoadWebfingerYAML 与 Len（包含仅图标规则的去重技术数），和其他来源保持同类入口结构。Engine 不再持有 webfinger 的 AST/AC/图标内部状态；底层 lexer/parser/ast/compiler 继续独立组织。默认来源开关保持不变。
 infoextract 复用公共 `ac` 筛选触发词，仍可通过 `infoextract.New` 独立使用；`Extract`、`ExtractWithContentType`、`AddRule` 与既有 `plugins.Information` 插件入口保留。默认仅加载高敏感凭据类规则，可 AddRule 显式扩展；邮箱、内网 IP、linkfinder 等不属于当前内置规则。有触发词的规则在任一触发词命中后执行正则，无触发词规则保留 fallback；正文/响应头路由与结果语义不变。独立调用和扩展规则的约束见 [infoextract 说明](../infoextract/README.md)。passive.New 显式选择插件与内存缓存容量。
 
-`InfoExtractor.Snapshot()` 捕获不可变规则、AC 索引及 `Identity()`；身份仅在进程内唯一，不是持久化版本号。成功 `AddRule` 发布新身份，失败不改变当前代次。直接提取的一次调用也固定正文和响应头使用同一快照。`plugins.Information` 每次分析绑定同一代次的正文/响应头缓存，规则更新后不命中旧代次结果；在途旧分析允许按原快照完成，但不污染新缓存。配置字段 `Extractor`、`CacheLimit` 不应在分析期间并发写入；提取器本身允许并发 `AddRule`。nil Extractor 返回错误；Information 元数据版本为 `"4"`。
+`InfoExtractor.Snapshot()` 捕获不可变规则、AC 索引及 `Identity()`；身份仅在进程内唯一，不是持久化版本号。成功 `AddRule` 发布新身份，失败不改变当前代次。直接提取的一次调用也固定正文和响应头使用同一快照。`plugins.Information` 每次分析绑定同一代次的正文和响应头去重标记。默认按 URL、媒体类型和长度确认正文是否检查过，命中后不执行并不重发发现。`HashBodyForCache` 可恢复按采集正文哈希区分内容。分析期间保持插件配置不变，提取器本身允许并发 `AddRule`。nil Extractor 返回错误，Information 元数据版本为 `"5"`。详见 [内置被动分析插件](../passive/plugins/README.md)。
 
 `passive/plugins.Serialization` 实现 `passive.Plugin`，零值可用；通过 `passive.New([]passive.Plugin{&plugins.Serialization{}}, cacheLimit)` 显式注册，ID 为 `serialization`、Version 为 `"1"`，不自动启用。它纯离线扫描请求 URL/头/正文和响应头/正文，仅做一层 URL/form 与有界标准/URL-safe Base64 解码，不反序列化、不联网、不解压/解密或跨流关联。每输入固定总扫描 1 MiB、128 个观察面、64 个 findings；超限或输入 Response.BodyTruncated 时标记 Result.Truncated。
 

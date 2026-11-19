@@ -68,7 +68,7 @@ _, _ = identity, findings
 
 ## 通过既有 Information 插件使用
 
-`passive/plugins.Information` 入口保持可用，使用同一个提取器能力，并分别缓存正文和响应头。每次分析固定使用一个规则快照；成功 `AddRule` 后开始的新分析不会复用旧代次结果，正文和响应头都重新填充缓存。已开始的并发分析允许按其已捕获的旧快照完成，不会污染新代次缓存：
+`passive/plugins.Information` 复用同一提取器，并分别记录检查过的正文和响应头。重复输入跳过对应的提取，旧发现只报告一次。每次分析固定使用一个规则快照，成功 `AddRule` 后的新分析按新规则检查，已开始的分析可按旧快照完成。
 
 ```go
 registry, err := passive.New([]passive.Plugin{

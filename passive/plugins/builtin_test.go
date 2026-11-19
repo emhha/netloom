@@ -21,7 +21,8 @@ func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	registry, err := passive.New([]passive.Plugin{&Information{Extractor: extractor}}, 8)
+	plugin := &Information{Extractor: extractor}
+	registry, err := passive.New([]passive.Plugin{plugin}, 8)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +58,9 @@ func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {
 	}
 	foundNewHeader := false
 	for _, artifact := range result.Artifacts {
+		if artifact.Rule == "test_body" {
+			t.Fatal("cache hit emitted an old body finding")
+		}
 		if artifact.Rule == "test_header" && strings.Contains(artifact.Value, "two") {
 			foundNewHeader = true
 		}
@@ -66,6 +70,11 @@ func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {
 	}
 	if !foundNewHeader {
 		t.Fatal("new header finding missing")
+	}
+	in.Response.Body = []byte("secret=other")
+	result, bodyHit, headerHit = analyze()
+	if !bodyHit || !headerHit || len(result.Artifacts) != 0 {
+		t.Fatal("equal-length body was not skipped or emitted old findings")
 	}
 	in.Response.Body = []byte("secret=second")
 	_, bodyHit, headerHit = analyze()
@@ -80,6 +89,16 @@ func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {
 	_, bodyHit, _ = analyze()
 	if bodyHit {
 		t.Fatal("body cache crossed a session boundary")
+	}
+	plugin.HashBodyForCache = true
+	_, bodyHit, _ = analyze()
+	if bodyHit {
+		t.Fatal("switching to content hashes reused metadata results")
+	}
+	in.Response.Body = []byte("secret=latest")
+	_, bodyHit, headerHit = analyze()
+	if bodyHit || !headerHit {
+		t.Fatal("content hashing missed a same-length change")
 	}
 }
 

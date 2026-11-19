@@ -1,8 +1,10 @@
 package passive
 
 import (
-	"github.com/emhha/netloom/httpdata"
+	"net/http"
 	"testing"
+
+	"github.com/emhha/netloom/httpdata"
 )
 
 func TestResponseKeySeparatesNativeFingerprintEvidence(t *testing.T) {
@@ -20,6 +22,45 @@ func TestResponseKeySeparatesNativeFingerprintEvidence(t *testing.T) {
 		if ResponseKey(copy) == key {
 			t.Fatal("different fingerprint evidence reused cached result")
 		}
+	}
+}
+
+func TestContentLengthKeyUsesOnlyMetadata(t *testing.T) {
+	in := Input{Site: "project", SessionID: "session",
+		Request:  &httpdata.Request{URL: "https://example.test:443/app.js"},
+		Response: &httpdata.Response{ContentType: "application/javascript; charset=utf-8", Body: []byte("one")},
+	}
+	key := ContentLengthKey(in)
+	in.Request.URL = "https://example.test/app.js"
+	in.Response.ContentType = "application/javascript"
+	in.Response.Body = []byte("two")
+	if key == "" || ContentLengthKey(in) != key {
+		t.Fatal("equal length and canonical metadata did not reuse the key")
+	}
+	in.Response.Body = []byte("four")
+	if ContentLengthKey(in) == key {
+		t.Fatal("changed length reused the key")
+	}
+	in.Response.BodyTruncated = true
+	for _, lengths := range [][]string{nil, {"0"}, {"-4"}, {"bad"}, {"100", "200"}} {
+		in.Response.Header = http.Header{"Content-Length": lengths}
+		if ContentLengthKey(in) != "" {
+			t.Fatalf("unknown declared length was cached: %q", lengths)
+		}
+	}
+	in.Response.Header.Set("Content-Length", "100")
+	prefixKey := ContentLengthKey(in)
+	if prefixKey == "" || prefixKey == key {
+		t.Fatal("truncated response did not get a separate key")
+	}
+	in.Response.Header.Set("Content-Length", "101")
+	if ContentLengthKey(in) == prefixKey {
+		t.Fatal("different declared length reused the key")
+	}
+	in.Response.Header.Set("Content-Length", "100")
+	in.Response.Body = []byte("five!")
+	if ContentLengthKey(in) == prefixKey {
+		t.Fatal("different captured length reused the key")
 	}
 }
 

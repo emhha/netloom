@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -49,11 +50,52 @@ func ContentKey(site, session, rawURL, contentType string, body []byte) string {
 	if canonicalURL == "" {
 		return ""
 	}
-	if mediaType, _, parseErr := mime.ParseMediaType(contentType); parseErr == nil {
-		contentType = strings.ToLower(mediaType)
-	}
 	bodyHash := sha256.Sum256(body)
-	data, _ := json.Marshal([]string{site, session, canonicalURL, contentType, hex.EncodeToString(bodyHash[:])})
+	data, _ := json.Marshal([]string{site, session, canonicalURL, normalizedContentType(contentType), hex.EncodeToString(bodyHash[:])})
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
+func normalizedContentType(value string) string {
+	if mediaType, _, err := mime.ParseMediaType(value); err == nil {
+		return strings.ToLower(mediaType)
+	}
+	return value
+}
+
+// ContentLengthKey identifies body analysis by metadata without reading body
+// bytes. It may match different content of the same length. A truncated body
+// requires a positive Content-Length and uses a separate key from complete
+// evidence. An empty key disables reuse when the full length is unknown.
+func ContentLengthKey(in Input) string {
+	if in.Request == nil || in.Response == nil {
+		return ""
+	}
+	canonicalURL := normalizedURL(in.Request.URL)
+	if canonicalURL == "" {
+		return ""
+	}
+	resp := in.Response
+	length, captured := uint64(len(resp.Body)), -1
+	var encoding string
+	if resp.BodyTruncated {
+		lengths := resp.Header.Values("Content-Length")
+		if len(lengths) != 1 || len(resp.Body) == 0 {
+			return ""
+		}
+		var err error
+		length, err = strconv.ParseUint(strings.TrimSpace(lengths[0]), 10, 63)
+		if err != nil || length == 0 {
+			return ""
+		}
+		captured = len(resp.Body)
+		encoding = strings.Join(resp.Header.Values("Content-Encoding"), ",")
+	}
+	data, _ := json.Marshal(struct {
+		Site, Session, URL, Type, Encoding string
+		Length                             uint64
+		Captured                           int
+	}{in.Site, in.SessionID, canonicalURL, normalizedContentType(resp.ContentType), encoding, length, captured})
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }

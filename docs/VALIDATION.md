@@ -1,5 +1,9 @@
 # 验证记录
 
+## 2026-11-19：按响应元数据跳过重复信息提取
+
+Go 1.26.3 linux/amd64。`make check race integration-compile` 通过，集成目标仅编译。离线测试覆盖等长更新按默认配置跳过且不重发旧发现、长度变化后重新分析、响应头独立检查、截断长度缺失、规则更新清除完成标记，以及启用正文哈希后能够区分等长内容。Registry 测试同时保留普通缓存的旧结果复用语义，并验证只去重模式不持有发现。用本地 TLS 源站和 CONNECT 代理验证了跨主动入口与 MITM 的去重。此次未测量吞吐或 CPU 使用率。
+
 ## 2026-11-19：HTTP 流量分析入口与缓存复用
 
 工具链 Go 1.26.3 linux/amd64。执行并通过 `make check race integration-compile` 与 `git diff --check`。本机 TCP 监听在沙盒内被拒绝，完整检查在允许本机临时端口的环境执行。`integration-compile` 只编译带 tag 的测试。

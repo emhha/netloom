@@ -38,7 +38,7 @@ type countPlugin struct {
 func (p *countPlugin) Metadata() passive.Metadata { return passive.Metadata{ID: p.id, Version: "1"} }
 func (p *countPlugin) CacheKey(in passive.Input) string {
 	if p.cache {
-		return passive.ContentKey(in.Site, in.SessionID, in.Request.URL, in.Response.ContentType, in.Response.Body)
+		return passive.ContentLengthKey(in)
 	}
 	return ""
 }
@@ -99,7 +99,7 @@ func reportWithin(t *testing.T, reports <-chan traffic.Report) traffic.Report {
 func TestSharedAnalysisProxyAndTLS(t *testing.T) {
 	const target = "https://app.test/static/main.js"
 	const fixture1 = "LTAIFixtureOnly0001"
-	const fixture2 = "LTAIFixtureOnly0002"
+	const fixture2 = "LTAIFixtureOnly00002"
 	type hello struct {
 		ciphers, versions []uint16
 		protocols         []string
@@ -180,7 +180,11 @@ func TestSharedAnalysisProxyAndTLS(t *testing.T) {
 			if err := json.Unmarshal(result.Data, &state); err != nil || state.BodyCacheHit != hit || state.HeaderCacheHit {
 				t.Fatalf("unexpected cache status %s: %v", result.Data, err)
 			}
-			inspected = slices.ContainsFunc(result.Artifacts, func(a passive.Artifact) bool { return a.Rule == "aliyun_access_key" && a.Value == fixture })
+			if hit {
+				inspected = len(result.Artifacts) == 0
+			} else {
+				inspected = slices.ContainsFunc(result.Artifacts, func(a passive.Artifact) bool { return a.Rule == "aliyun_access_key" && a.Value == fixture })
+			}
 		}
 		if !inspected {
 			t.Fatalf("synthetic finding missing: %+v", report.Results)
