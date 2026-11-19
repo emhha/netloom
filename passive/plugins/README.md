@@ -6,29 +6,19 @@
 
 使用 `passive.New` 注册需要的插件；导入包不会自动注册或运行分析。Registry 只负责插件调度与缓存，不强制所有插件使用 AC，也不对所有插件统一执行 AC 预筛选。是否使用公共 [ac 引擎](../../ac/README.md) 由各插件自行选择。
 
-`Information` 继续使用调用方提供的 `infoextract.InfoExtractor`；该提取器内部复用公共 AC，不依赖 Registry 才能工作。独立提取与规则扩展见 [infoextract 说明](../../infoextract/README.md)。
+信息提取插件通过 `passive/plugins/infoextract.New()` 构造。规则、AC 匹配和去重都在该插件包中实现，见 [信息提取插件说明](infoextract/README.md)。
 
 | 插件 | 注册 ID | 用途 |
 | --- | --- | --- |
-| `Information` | `infoextract` | 用 `Extractor` 提取敏感信息候选，正文与响应头分别缓存 |
+| `infoextract.Plugin` | `infoextract` | 提取敏感信息候选，独立去重正文与响应头 |
 | `Fingerprint` | `fingerprint` | 使用调用方提供的 `Engine` 匹配已取得的请求/响应技术指纹 |
 | `Serialization` | `serialization` | 有界识别序列化格式及协议线索，不执行反序列化 |
 
 `Serialization` 零值可用，不需要规则文件、客户端或初始化资源；元数据版本为字符串 `"1"`。不要据此推断其他插件也无需配置依赖。
 
-## Information：规则更新与缓存
+## 缓存策略
 
-`Information` 必须配置非 nil 的 `Extractor`；缺失时分析返回错误。插件元数据版本为字符串 `"5"`。`CacheKey` 为空，外层 Registry 每次调用它。插件内部对正文与响应头分别去重，`CacheLimit=0` 使用合计 256 条的默认容量，负数禁用去重。缓存只记完成标记。命中时跳过对应部分的提取，`body_cache_hit` 或 `header_cache_hit` 为 true，该部分不会再次报告旧发现。
-
-正文默认按项目、会话、规范化 URL、媒体类型和长度去重，无需散列正文。完整响应使用实际交给插件的正文长度。截断的正文使用有效的 `Content-Length`、已采集长度和内容编码，和完整响应分别去重。截断且无法确定长度时继续分析。等长内容更新可能被略过。需要区分等长变化时，显式设置 `HashBodyForCache: true`，按采集字节计算哈希。响应头使用独立的缓存键，变化的头仍会检查。
-
-每次 `Analyze` 捕获同一份不可变 `infoextract.Snapshot`，同时用于正文、响应头的规则匹配。成功的 `AddRule`（新增、替换或重复提交同名规则）、切换提取器实例或更改正文去重模式，都会清除先前的完成标记；失败的规则更新保留标记。
-
-与更新重叠的在途调用允许按旧快照完成，结束后其旧 Registry 即可回收。`Information` 支持并发分析和提取器的并发 `AddRule`。在使用前设置公开配置字段，分析期间保持配置不变。
-
-## 其他插件
-
-`Fingerprint` 以请求及响应证据（包括头、正文和状态码等）为键。使用 `passive.New` 时，命中就复用指纹结果。`Serialization` 的 `CacheKey` 为空，每次执行自己的有界检查。自定义插件通过 `CacheKey` 决定哪些输入可以复用。调用方可以选用 `passive.NewDeduplicating`，让有键的插件命中后只报告 `CacheHit`，不保留或重发旧的 `Artifacts` 或 `Data`。
+`infoextract` 由插件内部判断正文和响应头是否已检查，命中时跳过并且不重发旧发现。`Fingerprint` 以请求及响应证据（包括头、正文和状态码等）为键。使用 `passive.New` 时，命中就复用指纹结果。`Serialization` 的 `CacheKey` 为空，每次执行自己的有界检查。自定义插件通过 `CacheKey` 决定哪些输入可以复用。调用方可以选用 `passive.NewDeduplicating`，让有键的插件命中后只报告 `CacheHit`，不保留或重发旧的 `Artifacts` 或 `Data`。
 
 ## Serialization：离线格式线索
 

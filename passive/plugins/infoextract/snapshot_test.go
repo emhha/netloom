@@ -8,15 +8,15 @@ import (
 )
 
 func TestRuleSnapshotsSurviveReplacementAndAppend(t *testing.T) {
-	e := &InfoExtractor{}
+	e := &extractor{}
 	oldRule := Rule{Name: "replace", Pattern: "old-value", Scope: "body", Triggers: []string{"old-trigger"}}
-	if err := e.AddRule(oldRule); err != nil {
+	if err := e.addRule(oldRule); err != nil {
 		t.Fatal(err)
 	}
 	// These are exactly the two values readers retain after unlocking.
 	oldRules, oldMatcher := e.rules, e.ac
 	wantOld := oldRules[0].Rule
-	if err := e.AddRule(Rule{Name: "replace", Pattern: "new-value", Scope: "body", Triggers: []string{"new-trigger"}}); err != nil {
+	if err := e.addRule(Rule{Name: "replace", Pattern: "new-value", Scope: "body", Triggers: []string{"new-trigger"}}); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(oldRules[0].Rule, wantOld) {
@@ -27,47 +27,47 @@ func TestRuleSnapshotsSurviveReplacementAndAppend(t *testing.T) {
 	} else if _, ok := hits["old-trigger"]; !ok {
 		t.Fatalf("old matcher lost old trigger: %v", hits)
 	}
-	if got := e.ExtractWithContentType([]byte("old-trigger old-value"), nil, "text/plain"); len(got) != 0 {
+	if got := e.extract([]byte("old-trigger old-value"), nil, "text/plain"); len(got) != 0 {
 		t.Fatalf("replaced rule still runs: %+v", got)
 	}
-	want := e.ExtractWithContentType([]byte("new-trigger new-value"), nil, "text/plain")
+	want := e.extract([]byte("new-trigger new-value"), nil, "text/plain")
 	if len(want) != 1 || want[0].Value != "new-value" {
 		t.Fatalf("new rule/matcher snapshot inconsistent: %+v", want)
 	}
 	currentRules, currentMatcher := e.rules, e.ac
-	if err := e.AddRule(Rule{Name: "replace", Pattern: "[", Triggers: []string{"bad"}}); err == nil {
+	if err := e.addRule(Rule{Name: "replace", Pattern: "[", Triggers: []string{"bad"}}); err == nil {
 		t.Fatal("invalid replacement accepted")
 	}
 	if e.ac != currentMatcher || !reflect.DeepEqual(e.rules, currentRules) {
 		t.Fatal("invalid replacement changed published state")
 	}
-	if err := e.AddRule(Rule{Name: "tail", Pattern: "tail", Scope: "body"}); err != nil {
+	if err := e.addRule(Rule{Name: "tail", Pattern: "tail", Scope: "body"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(currentRules) != 1 || currentRules[0].Name != "replace" {
 		t.Fatalf("append mutated previous snapshot: %+v", currentRules)
 	}
-	got := e.ExtractWithContentType([]byte("new-trigger new-value tail"), nil, "text/plain")
+	got := e.extract([]byte("new-trigger new-value tail"), nil, "text/plain")
 	if len(got) != 2 || got[0].RuleName != "replace" || got[1].RuleName != "tail" {
 		t.Fatalf("replacement/append changed business rule order: %+v", got)
 	}
 }
 
 func TestRuleOwnsTriggerSlice(t *testing.T) {
-	e := &InfoExtractor{}
+	e := &extractor{}
 	triggers := []string{"old-trigger"}
-	if err := e.AddRule(Rule{Name: "owned", Pattern: "value", Scope: "body", Triggers: triggers}); err != nil {
+	if err := e.addRule(Rule{Name: "owned", Pattern: "value", Scope: "body", Triggers: triggers}); err != nil {
 		t.Fatal(err)
 	}
 	triggers[0] = "caller-reused"
 	// Force a rebuild: the rule's triggerSet and the new AC must still agree.
-	if err := e.AddRule(Rule{Name: "unrelated", Pattern: "absent", Scope: "body", Triggers: []string{"absent"}}); err != nil {
+	if err := e.addRule(Rule{Name: "unrelated", Pattern: "absent", Scope: "body", Triggers: []string{"absent"}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.ExtractWithContentType([]byte("old-trigger value"), nil, "text/plain"); len(got) != 1 || got[0].RuleName != "owned" {
+	if got := e.extract([]byte("old-trigger value"), nil, "text/plain"); len(got) != 1 || got[0].RuleName != "owned" {
 		t.Fatalf("caller mutation changed registered trigger: %+v", got)
 	}
-	if got := e.ExtractWithContentType([]byte("caller-reused value"), nil, "text/plain"); len(got) != 0 {
+	if got := e.extract([]byte("caller-reused value"), nil, "text/plain"); len(got) != 0 {
 		t.Fatalf("caller mutation enabled a different trigger: %+v", got)
 	}
 }
@@ -86,8 +86,8 @@ func TestTriggerEmptySliceAndEmptyKeywordRemainDistinct(t *testing.T) {
 		{"mixed-keywords-miss", []string{"", "absent"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			e := &InfoExtractor{}
-			if err := e.AddRule(Rule{Name: tc.name, Pattern: "value", Triggers: tc.triggers}); err != nil {
+			e := &extractor{}
+			if err := e.addRule(Rule{Name: tc.name, Pattern: "value", Triggers: tc.triggers}); err != nil {
 				t.Fatal(err)
 			}
 			for _, scope := range []string{"body", "header"} {
@@ -96,7 +96,7 @@ func TestTriggerEmptySliceAndEmptyKeywordRemainDistinct(t *testing.T) {
 					t.Fatalf("%s: findings = %+v, want hit %v", scope, got, tc.want)
 				}
 			}
-			if got := e.ExtractWithContentType([]byte("value"), nil, "text/plain"); (len(got) == 1) != tc.want {
+			if got := e.extract([]byte("value"), nil, "text/plain"); (len(got) == 1) != tc.want {
 				t.Fatalf("body routing: findings = %+v, want hit %v", got, tc.want)
 			}
 		})
@@ -104,9 +104,9 @@ func TestTriggerEmptySliceAndEmptyKeywordRemainDistinct(t *testing.T) {
 }
 
 func TestConcurrentAddRuleAndExtraction(t *testing.T) {
-	e := &InfoExtractor{}
+	e := &extractor{}
 	borrowed := []string{"old-trigger"}
-	if err := e.AddRule(Rule{Name: "replace", Pattern: "value-one", Scope: "body", Triggers: borrowed}); err != nil {
+	if err := e.addRule(Rule{Name: "replace", Pattern: "value-one", Scope: "body", Triggers: borrowed}); err != nil {
 		t.Fatal(err)
 	}
 	body := []byte("old-trigger new-trigger value-one value-two")
@@ -118,7 +118,7 @@ func TestConcurrentAddRuleAndExtraction(t *testing.T) {
 			defer wg.Done()
 			<-start
 			for i := 0; i < 150; i++ {
-				got := e.ExtractWithContentType(body, nil, "text/plain")
+				got := e.extract(body, nil, "text/plain")
 				// Every published version matches exactly once, regardless of
 				// which coherent rules/matcher snapshot the reader acquired.
 				if len(got) != 1 || got[0].RuleName != "replace" || (got[0].Value != "value-one" && got[0].Value != "value-two") {
@@ -138,7 +138,7 @@ func TestConcurrentAddRuleAndExtraction(t *testing.T) {
 				rule.Pattern = "value-one"
 				rule.Triggers = []string{"old-trigger"}
 			}
-			if err := e.AddRule(rule); err != nil {
+			if err := e.addRule(rule); err != nil {
 				t.Error(err)
 				return
 			}
@@ -151,7 +151,7 @@ func TestConcurrentAddRuleAndExtraction(t *testing.T) {
 			// Reusing a previously registered caller slice must not race with
 			// rebuildAC, including its first rebuild before replacement.
 			borrowed[0] = fmt.Sprintf("caller-reused-%d", i)
-			if err := e.AddRule(Rule{Name: fmt.Sprintf("append-%d", i), Pattern: "not-present", Scope: "body", Triggers: []string{"not-present"}}); err != nil {
+			if err := e.addRule(Rule{Name: fmt.Sprintf("append-%d", i), Pattern: "not-present", Scope: "body", Triggers: []string{"not-present"}}); err != nil {
 				t.Error(err)
 				return
 			}

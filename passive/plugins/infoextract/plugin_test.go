@@ -1,4 +1,4 @@
-package plugins
+package infoextract
 
 import (
 	"context"
@@ -7,21 +7,19 @@ import (
 	"testing"
 
 	"github.com/emhha/netloom/httpdata"
-	"github.com/emhha/netloom/infoextract"
 	"github.com/emhha/netloom/passive"
 )
 
 func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {
-	extractor := infoextract.New()
-	for _, rule := range []infoextract.Rule{
+	plugin := New()
+	for _, rule := range []Rule{
 		{Name: "test_body", Pattern: `secret=([a-z]+)`, Scope: "body"},
 		{Name: "test_header", Pattern: `(?i)x-token: ([a-z]+)`, Scope: "header"},
 	} {
-		if err := extractor.AddRule(rule); err != nil {
+		if err := plugin.AddRule(rule); err != nil {
 			t.Fatal(err)
 		}
 	}
-	plugin := &Information{Extractor: extractor}
 	registry, err := passive.New([]passive.Plugin{plugin}, 8)
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +102,7 @@ func TestInformationReusesBodyWhileExtractingChangedHeaders(t *testing.T) {
 
 func TestInformationPreservesEntireMatchWithCaptureGroups(t *testing.T) {
 	const token = "sk_live_abcdefghijklmnopqrstuvwx"
-	p := &Information{Extractor: infoextract.New()}
+	p := New()
 	result, err := p.Analyze(context.Background(), passive.Input{Site: "https://example.test", Request: &httpdata.Request{URL: "https://example.test"}, Response: &httpdata.Response{Body: []byte(token), ContentType: "text/html"}})
 	if err != nil {
 		t.Fatal(err)

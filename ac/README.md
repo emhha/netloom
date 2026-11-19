@@ -36,8 +36,8 @@ Cloudflare 使用较大的密集指针转移表，当前小词表下吞吐较好
 ## 验证
 
 ```sh
-go test ./ac ./infoextract
-go test -race ./ac ./infoextract
+go test ./ac ./passive/plugins/infoextract
+go test -race ./ac ./passive/plugins/infoextract
 go test ./ac -run '^$' -bench . -benchmem
 ```
 

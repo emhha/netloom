@@ -22,10 +22,9 @@ import (
 	"time"
 
 	"github.com/emhha/netloom"
-	"github.com/emhha/netloom/infoextract"
 	"github.com/emhha/netloom/mitm"
 	"github.com/emhha/netloom/passive"
-	"github.com/emhha/netloom/passive/plugins"
+	"github.com/emhha/netloom/passive/plugins/infoextract"
 	"github.com/emhha/netloom/traffic"
 )
 
@@ -147,7 +146,7 @@ func TestSharedAnalysisProxyAndTLS(t *testing.T) {
 
 	cached := &countPlugin{id: "cached", cache: true}
 	uncached := &countPlugin{id: "uncached"}
-	registry, err := passive.New([]passive.Plugin{&plugins.Information{Extractor: infoextract.New()}, cached, uncached}, 16)
+	registry, err := passive.New([]passive.Plugin{infoextract.New(), cached, uncached}, 16)
 	if err != nil {
 		t.Fatal(err)
 	}

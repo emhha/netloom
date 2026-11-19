@@ -17,6 +17,7 @@ REQUIRED = (
     "docs/testing.md", "docs/UPGRADING.md", "docs/provenance/README.md",
     "examples/README.md", "httpclient/README.md", "mapping/README.md",
     "enterprise/README.md", "httpdata/netloomdata/convert.go",
+    "passive/plugins/infoextract/README.md", "passive/plugins/infoextract/plugin.go",
 )
 
 
@@ -84,6 +85,8 @@ def check(root):
         errors.append(f"go.mod must declare module {MODULE}")
     if (root / "httpdata/netrtdata").exists():
         errors.append("obsolete adapter directory: httpdata/netrtdata")
+    if (root / "infoextract").exists():
+        errors.append("obsolete plugin directory: infoextract")
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root)
         if any(part.startswith(".") or part in ("node_modules", "vendor") for part in relative.parts):
@@ -103,6 +106,8 @@ def check(root):
             imports.extend(re.findall(r'"([^"\n]+)"', block or single))
         if any(re.match(r"^(?:netloom(?:/|$)|netloom\.local/|netrt\.local/)", name) for name in imports):
             errors.append(f"{relative}: obsolete Go name/import")
+        if any(name == MODULE + "/infoextract" or name.startswith(MODULE + "/infoextract/") for name in imports):
+            errors.append(f"{relative}: obsolete infoextract import; use {MODULE}/passive/plugins/infoextract")
         # Runtime and neutral snapshots must stay independent of extensions.
         if not path.name.endswith("_test.go"):
             local_refs = [name for name in imports if name == MODULE or name.startswith(MODULE + "/")]

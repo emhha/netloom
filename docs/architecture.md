@@ -6,9 +6,9 @@ Netloom 是单一 Go module。根包提供网络运行时，子包按能力独�
 
 ```text
 probe / dirscan / nethttp ───────────────> netloom（根包）
-passive/plugins ────────────────────────> passive + fingerprint / infoextract
-fingerprint / infoextract / passive ────> httpdata
-infoextract / passive/plugins ──────────> ac
+passive/plugins ────────────────────────> passive + fingerprint + ac
+passive/plugins/infoextract ────────────> passive + ac
+fingerprint / passive ──────────────────> httpdata
 httpdata/netloomdata ───────────────────> netloom + httpdata
 traffic ───────────────────────────────> netloom + mitm + passive + httpdata/netloomdata
 mapping / enterprise ──────────────────> httpclient
@@ -17,7 +17,7 @@ geoip / mitm ──────────────────────�
 
 这是主要依赖关系，不是完整 import 清单。实际依赖以 `go list -deps ./...` 为准。根包不依赖扩展；`httpdata` 不依赖网络运行时。需要分析网络结果时，在 `httpdata/netloomdata` 显式复制，而不是让离线分析器接收运行中的连接或共享请求状态。
 
-`ac` 是 Cloudflare ahocorasick 固定版本的薄适配层，可独立使用，归一化空词/重复词并统一走线程安全的唯一词集合扫描；不另行维护一套自动机。fingerprint 原有匹配内核保持独立，不迁入该共享层。`infoextract` 使用它筛选触发词后运行正则，既可直接使用，也可通过既有 `plugins.Information` 接入被动分析。`plugins.Serialization` 自行使用共享 AC 筛选文本规则候选，只对候选执行正则；安全固定字面量可直接命中，无法安全触发的规则保留 fallback，二进制 magic 仍做前缀检查。Registry 负责插件调度与缓存，不强制所有插件使用 AC；是否选择共享引擎属于各插件的实现决策。
+`ac` 是 Cloudflare ahocorasick 固定版本的薄适配层，可独立使用，归一化空词和重复词，并统一走线程安全的唯一词集合扫描。`passive/plugins/infoextract` 使用它筛选触发词后运行正则，规则和匹配器由插件自己持有。`plugins.Serialization` 使用共享 AC 筛选文本规则，安全固定字面量可直接命中，无法安全触发的规则走正则，二进制 magic 做前缀检查。fingerprint 保持独立匹配内核。Registry 负责插件调度和缓存。
 
 `httpclient` 面向第三方 API，与根包的 TLS 指纹传输不是同一个客户端。两者分别拥有重试、限流、TLS 和响应体策略；不能仅为复用而强行统一默认行为。仅纯本地代理 URL 解析与安全错误由 `internal/proxyconfig` 共享，各客户端独立选择支持的 scheme，解析不触发 DNS 或网络。数据源适配器依赖小型调用方接口取得凭据，不内置凭据存储服务。
 
@@ -28,7 +28,7 @@ geoip / mitm ──────────────────────�
 | 根目录 Go 源码 | 配置、请求/响应、Engine、Transport、Pipeline、调度、限流、TLS、重定向与流式生命周期 |
 | `httpdata/` | 离线证据模型；`netloomdata/` 是运行时复制适配器 |
 | `ac/` | 公共字节串 Aho-Corasick 匹配引擎，不依赖 HTTP 模型或运行时 |
-| `fingerprint/`、`infoextract/`、`passive/` | 离线分析；内置插件在 `passive/plugins/` |
+| `fingerprint/`、`passive/` | 离线分析；内置插件在 `passive/plugins/`，信息提取实现在 `passive/plugins/infoextract/` |
 | `traffic/` | 组合主动请求和 MITM，解析入口代理，采集证据并调度调用方选择的插件 |
 | `probe/`、`dirscan/` | 主动探测；授权和任务持久化归调用方 |
 | `nethttp/`、`mitm/`、`geoip/` | 请求转换、代理原语、本地 IP 信息 |

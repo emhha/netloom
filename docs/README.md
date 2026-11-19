@@ -34,7 +34,7 @@
 - [企业信息](../enterprise/README.md)：企业数据源接口与 Aiqicha 适配。
 - [GeoIP](../geoip/README.md)：本地 MMDB/CDN 资源与显式更新。
 - [共享 AC 匹配](../ac/README.md)：独立字节串匹配引擎与关键词索引回调。
-- [信息提取](../infoextract/README.md)：独立调用、触发词/正则与 Information 插件。
+- [信息提取插件](../passive/plugins/infoextract/README.md)：注册、规则扩展和去重。
 - [内置被动插件](../passive/plugins/README.md)：显式注册、Serialization 的解码预算和结果边界。
 - [指纹规则](../fingerprint/rules/README.md)：来源、配置和支持范围。
 - [目录字典](../dirscan/wordlists/README.md)：固定快照、校验和更新。

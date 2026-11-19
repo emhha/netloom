@@ -276,7 +276,7 @@ mapping/enterprise 区分“缺少凭据”与“读取失败”：nil 读取器
 
 ## 扩展契约
 
-离线 fingerprint、infoextract、passive 使用 httpdata 快照，不依赖网络运行时；不需要创建 Engine。`ac` 是独立公共字节串匹配包，导入路径为 `github.com/emhha/netloom/ac`：
+离线 fingerprint 和 passive 插件使用 httpdata 快照，不需要创建 Engine。`ac` 是独立公共字节串匹配包，导入路径为 `github.com/emhha/netloom/ac`：
 
 ```go
 // package ac
@@ -295,9 +295,7 @@ MatchExchange(ctx, *httpdata.Request, *httpdata.Response) 额外校验 Fingerpri
 EHole/FingerprintHub 的 AC、图标及正则字面量索引在 New 时构建，Engine 可并发复用。正文转换和请求约束缓存均限于单次调用，不共享可变匹配状态。优化不改变条件、结果顺序、版本或置信度；缺少可证明必要的字面量时会退回完整正则检查。详见 [性能记录](PERFORMANCE.md)。
 
 webfinger.go 提供独立 WebfingerMatcher、LoadWebfingerYAML 与 Len（包含仅图标规则的去重技术数），和其他来源保持同类入口结构。Engine 不再持有 webfinger 的 AST/AC/图标内部状态；底层 lexer/parser/ast/compiler 继续独立组织。默认来源开关保持不变。
-infoextract 复用公共 `ac` 筛选触发词，仍可通过 `infoextract.New` 独立使用；`Extract`、`ExtractWithContentType`、`AddRule` 与既有 `plugins.Information` 插件入口保留。默认仅加载高敏感凭据类规则，可 AddRule 显式扩展；邮箱、内网 IP、linkfinder 等不属于当前内置规则。有触发词的规则在任一触发词命中后执行正则，无触发词规则保留 fallback；正文/响应头路由与结果语义不变。独立调用和扩展规则的约束见 [infoextract 说明](../infoextract/README.md)。passive.New 显式选择插件与内存缓存容量。
-
-`InfoExtractor.Snapshot()` 捕获不可变规则、AC 索引及 `Identity()`；身份仅在进程内唯一，不是持久化版本号。成功 `AddRule` 发布新身份，失败不改变当前代次。直接提取的一次调用也固定正文和响应头使用同一快照。`plugins.Information` 每次分析绑定同一代次的正文和响应头去重标记。默认按 URL、媒体类型和长度确认正文是否检查过，命中后不执行并不重发发现。`HashBodyForCache` 可恢复按采集正文哈希区分内容。分析期间保持插件配置不变，提取器本身允许并发 `AddRule`。nil Extractor 返回错误，Information 元数据版本为 `"5"`。详见 [内置被动分析插件](../passive/plugins/README.md)。
+信息提取由 `github.com/emhha/netloom/passive/plugins/infoextract` 提供。`infoextract.New()` 返回可直接注册的插件，`AddRule` 添加或替换规则。正文和响应头共用一次分析的规则快照。插件通过公共 `ac` 筛选触发词后执行正则，正文默认按项目、会话、URL、媒体类型和长度去重，匹配过的发现只报告一次。`HashBodyForCache` 可按采集正文哈希识别等长变化。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
 
 `passive/plugins.Serialization` 实现 `passive.Plugin`，零值可用；通过 `passive.New([]passive.Plugin{&plugins.Serialization{}}, cacheLimit)` 显式注册，ID 为 `serialization`、Version 为 `"1"`，不自动启用。它纯离线扫描请求 URL/头/正文和响应头/正文，仅做一层 URL/form 与有界标准/URL-safe Base64 解码，不反序列化、不联网、不解压/解密或跨流关联。每输入固定总扫描 1 MiB、128 个观察面、64 个 findings；超限或输入 Response.BodyTruncated 时标记 Result.Truncated。
 

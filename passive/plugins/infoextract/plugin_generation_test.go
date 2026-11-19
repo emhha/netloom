@@ -1,4 +1,4 @@
-package plugins
+package infoextract
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/emhha/netloom/httpdata"
-	"github.com/emhha/netloom/infoextract"
 	"github.com/emhha/netloom/passive"
 )
 
@@ -19,8 +18,8 @@ func informationGenerationInput() passive.Input {
 	}
 }
 
-func informationGenerationRule(value, trigger string) infoextract.Rule {
-	return infoextract.Rule{Name: "versioned", Pattern: value, Triggers: []string{trigger}}
+func informationGenerationRule(value, trigger string) Rule {
+	return Rule{Name: "versioned", Pattern: value, Triggers: []string{trigger}}
 }
 
 func checkInformationValues(t *testing.T, result passive.Result, want string, count int) {
@@ -36,8 +35,7 @@ func checkInformationValues(t *testing.T, result passive.Result, want string, co
 }
 
 func TestInformationInvalidatesCacheOnRuleAppendAndReplacement(t *testing.T) {
-	e := &infoextract.InfoExtractor{}
-	p := &Information{Extractor: e}
+	p := &Plugin{}
 	registry, err := passive.New([]passive.Plugin{p}, 8)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +55,7 @@ func TestInformationInvalidatesCacheOnRuleAppendAndReplacement(t *testing.T) {
 	if !analyze().CacheHit {
 		t.Fatal("unchanged empty generation was not cached")
 	}
-	if err := e.AddRule(informationGenerationRule("old-value", "old-trigger")); err != nil {
+	if err := p.AddRule(informationGenerationRule("old-value", "old-trigger")); err != nil {
 		t.Fatal(err)
 	}
 	got := analyze()
@@ -65,7 +63,7 @@ func TestInformationInvalidatesCacheOnRuleAppendAndReplacement(t *testing.T) {
 	if got.CacheHit || !analyze().CacheHit {
 		t.Fatal("append did not invalidate then reuse the new generation")
 	}
-	if err := e.AddRule(informationGenerationRule("new-value", "new-trigger")); err != nil {
+	if err := p.AddRule(informationGenerationRule("new-value", "new-trigger")); err != nil {
 		t.Fatal(err)
 	}
 	got = analyze()
@@ -73,7 +71,7 @@ func TestInformationInvalidatesCacheOnRuleAppendAndReplacement(t *testing.T) {
 	if got.CacheHit || !analyze().CacheHit {
 		t.Fatal("replacement did not invalidate then reuse the new generation")
 	}
-	if err := e.AddRule(infoextract.Rule{Name: "added", Pattern: "added-value", Scope: "body"}); err != nil {
+	if err := p.AddRule(Rule{Name: "added", Pattern: "added-value", Scope: "body"}); err != nil {
 		t.Fatal(err)
 	}
 	got = analyze()
@@ -85,7 +83,7 @@ func TestInformationInvalidatesCacheOnRuleAppendAndReplacement(t *testing.T) {
 	if !foundAdded || got.CacheHit {
 		t.Fatalf("appended rule absent or stale cache reused: %+v", got)
 	}
-	if err := e.AddRule(infoextract.Rule{Name: "added", Pattern: "["}); err == nil {
+	if err := p.AddRule(Rule{Name: "added", Pattern: "["}); err == nil {
 		t.Fatal("invalid rule accepted")
 	}
 	if !analyze().CacheHit {
@@ -94,28 +92,27 @@ func TestInformationInvalidatesCacheOnRuleAppendAndReplacement(t *testing.T) {
 }
 
 func TestInformationPinsRegistryAcrossUpdatesAndExtractorInstances(t *testing.T) {
-	e, other := &infoextract.InfoExtractor{}, &infoextract.InfoExtractor{}
-	if err := e.AddRule(informationGenerationRule("old-value", "old-trigger")); err != nil {
+	first, other := &Plugin{}, &Plugin{}
+	if err := first.AddRule(informationGenerationRule("old-value", "old-trigger")); err != nil {
 		t.Fatal(err)
 	}
 	if err := other.AddRule(informationGenerationRule("new-value", "new-trigger")); err != nil {
 		t.Fatal(err)
 	}
-	p := &Information{Extractor: e}
-	oldCache, err := p.registry()
+	oldCache, err := first.registry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Both extractors have had one AddRule call; object identity must also be
-	// part of the generation identity. Reconfiguration here is not concurrent.
-	p.Extractor = other
-	newCache, err := p.registry()
+	// part of the generation identity.
+	newCache, err := other.registry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if oldCache == newCache {
-		t.Fatal("different extractors with equal local revision shared a cache")
+		t.Fatal("different plugin instances shared a cache")
 	}
+	p := other
 	in := informationGenerationInput()
 	// Simulate an old in-flight call completing after the new registry exists.
 	oldResults, err := oldCache.Analyze(context.Background(), in, nil)
@@ -152,19 +149,21 @@ func TestInformationPinsRegistryAcrossUpdatesAndExtractorInstances(t *testing.T)
 	checkInformationValues(t, got, "old-value", 2)
 }
 
-func TestInformationRequiresExtractor(t *testing.T) {
-	p := &Information{}
-	if _, err := p.Analyze(context.Background(), informationGenerationInput()); err == nil {
-		t.Fatal("nil extractor did not return an error")
+func TestPluginZeroValueUsesAnEmptyRuleSet(t *testing.T) {
+	in := informationGenerationInput()
+	in.Response.Body = []byte("key=AKIAIOSFODNN7EXAMPLE")
+	var p Plugin
+	got, err := p.Analyze(t.Context(), in)
+	if err != nil || len(got.Artifacts) != 0 {
+		t.Fatalf("zero-value analysis: %+v %v", got, err)
 	}
 }
 
 func TestInformationConcurrentRuleUpdatesKeepOneGeneration(t *testing.T) {
-	e := &infoextract.InfoExtractor{}
-	if err := e.AddRule(informationGenerationRule("old-value", "old-trigger")); err != nil {
+	p := &Plugin{}
+	if err := p.AddRule(informationGenerationRule("old-value", "old-trigger")); err != nil {
 		t.Fatal(err)
 	}
-	p := &Information{Extractor: e}
 	in := informationGenerationInput()
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -201,7 +200,7 @@ func TestInformationConcurrentRuleUpdatesKeepOneGeneration(t *testing.T) {
 			if i%2 != 0 {
 				value, trigger = "new-value", "new-trigger"
 			}
-			if err := e.AddRule(informationGenerationRule(value, trigger)); err != nil {
+			if err := p.AddRule(informationGenerationRule(value, trigger)); err != nil {
 				t.Error(err)
 				return
 			}

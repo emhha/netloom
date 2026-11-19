@@ -6,6 +6,8 @@
 
 新增 `github.com/emhha/netloom/traffic`。调用方可以通过其主动发送入口、Run 任务适配和 MITM 后端接入同一 Registry，并选择共享或独立的上游代理。默认正文采集上限为每方向 128 KiB，异步等待队列容量为 32，分析 context 超时为 5 秒。原生 Engine、MITM 和插件接口继续可用。见 [HTTP 流量分析](../traffic/README.md)。
 
+原 `github.com/emhha/netloom/infoextract` 导入路径已移除。请改导入 `github.com/emhha/netloom/passive/plugins/infoextract`，用 `infoextract.New()` 替代 `&plugins.Information{Extractor: infoextract.New()}`，直接把新对象注册到 `passive.Registry`，并在插件上调用 `AddRule`。原 `Extract`、`ExtractWithContentType` 和 `Snapshot` 接口已移除。分析已有正文或响应头时，构造 `passive.Input` 并读 `passive.Result.Artifacts`。`Value` 返回完整匹配。插件 ID `infoextract` 和版本 `"5"` 保持一致。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
+
 统一使用 module `github.com/emhha/netloom`，根包标识符为 `netloom`，子包位于同一 module 下。使用早期裸路径 `netloom` 的代码应更新 module 依赖及导入路径，例如：
 
 ```go
@@ -15,11 +17,11 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 不提供旧 module 路径的兼容包。安装方式见 [安装与使用](MIGRATION.md)。
 
-新增公共包 `github.com/emhha/netloom/ac`，提供 `ac.New([]string) *ac.Matcher`、`(*ac.Matcher).Search([]byte) map[string]struct{}` 与 `(*ac.Matcher).Match([]byte, func(index int))`。它薄适配固定版本 Cloudflare ahocorasick，统一使用线程安全扫描；空词忽略、重复词保留第一个原始下标。`Match` 每个命中唯一词每次最多回调一次，不保证顺序或 occurrence 次数，不是位置枚举接口。调用方可独立复用字节串匹配引擎，详见 [ac 说明](../ac/README.md)。`infoextract` 改为复用此包，原 `infoextract.New`、提取/注册规则接口及 `plugins.Information` 入口保留，无需改为通过 Registry 才能使用；见 [infoextract 说明](../infoextract/README.md)。
+新增公共包 `github.com/emhha/netloom/ac`，提供 `ac.New([]string) *ac.Matcher`、`(*ac.Matcher).Search([]byte) map[string]struct{}` 与 `(*ac.Matcher).Match([]byte, func(index int))`。它薄适配固定版本 Cloudflare ahocorasick，统一使用线程安全扫描；空词忽略、重复词保留第一个原始下标。`Match` 每个命中唯一词每次最多回调一次，不保证顺序或 occurrence 次数，不是位置枚举接口。调用方可独立复用字节串匹配引擎，详见 [ac 说明](../ac/README.md)。
 
 ### 默认值与可见行为
 
-- `plugins.Information` 版本 `"5"` 默认按项目、会话、URL、媒体类型和长度去重。重复正文或响应头只报告命中，不重发旧的发现；需要识别等长正文变化时可启用 `HashBodyForCache`。`passive.New` 继续返回缓存结果，新增 `passive.NewDeduplicating` 可为有缓存键的插件选择只跳过的行为。见 [内置被动分析插件](../passive/plugins/README.md)。
+- 信息提取插件版本 `"5"` 默认按项目、会话、URL、媒体类型和长度去重。重复正文或响应头只报告命中，不重发旧的发现；需要识别等长正文变化时可启用 `HashBodyForCache`。`passive.New` 继续返回缓存结果，新增 `passive.NewDeduplicating` 可为有缓存键的插件选择只跳过的行为。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
 
 - **API 会话默认不重试具副作用方法**：`httpclient.Options.RetryMethods` 为 nil 仅允许 GET/HEAD/OPTIONS，非 nil 空列表不重试任何方法；构造时复制，按大写方法精确匹配。旧默认会重试 POST/PATCH 的调用方须重新确认业务可重入性，再显式加入列表，并保证正文可重放。一次性流即便方法获准也只发送一次；DisableRetries/负 RetryMax 仍优先，RetryMax 为 0 仍表示默认最多三次重试。根包 RetryPolicy 的显式 opt-in 语义不变。付费 GET 仍建议禁重试，此变化不提供 exactly-once 保证。
 - **凭据读取错误不再伪装成未配置**：mapping/enterprise 现在包装 SecretReader.Get 的非 nil 错误，可 errors.Is 判断底层取消、超时或存储故障；即使同时返回字节也不发送请求。只有 nil 读取器或无错误的空/空白必需值使用原有 ErrEngineNotConfigured/ErrNotConfigured。FOFA 的可选 fofa_email 读取故障同样失败，key/email 每次 Search 在分页前各读取一次；爱企查将纯空白 Cookie 视为未配置。此前统一捕获“未配置”的调用方应分别处理存储失败与配置缺失。
@@ -30,11 +32,11 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 - `Task` 新增 `Mutators []Mutator`，按顺序在请求副本上执行一次，先于 host 配额选择、校验及重试；失败通过结果 `Response.Error` 返回，且不发送、不执行响应 Pipeline。`Task.Pipeline` 保持响应后分析；请把其中的 `AsMutator(m)` 移到 `Mutators: []Mutator{m}`。`AsMutator` 标记弃用，只保留独立发送前 Context 的兼容入口；已有 Response 时返回可用 `errors.Is` 判断的 `ErrMutatorAfterSend`，不再改写已发送请求。单次 `Send`/`Do` 在调用前显式变换。`probe` 在构造请求时设置默认 User-Agent，自定义 User-Agent 仍覆盖它，响应分析不再运行请求 mutator。详见 [API 契约](API.md)。
 
-- `infoextract` 新增 `Snapshot()`、`Snapshot.Identity()` 和快照的 `ExtractWithContentType`，规则、AC 索引和进程内唯一代次身份同时捕获；既有直接提取接口保留，并强化为一次调用的正文/响应头使用同一代规则。`plugins.Information` 按此身份替换内部缓存，成功 `AddRule` 后的新分析不再复用旧结果；在途旧分析仍可完成，但不会污染新代缓存。插件元数据版本从 `"3"` 升为 `"4"`；nil Extractor 改为返回明确错误。快照身份不是可持久化版本号；详见 [提取器说明](../infoextract/README.md) 和 [插件说明](../passive/plugins/README.md)。
+- 信息提取插件每次分析同时捕获规则、AC 索引和内部代次身份，正文和响应头按同一套规则检查。成功 `AddRule` 后的新分析使用新规则和去重标记，在途分析可以按旧规则完成。快照作为插件内部实现管理。
 
 - `dirscan.RecursionDepth` 现在相对固定 `BaseURL` 扫描根计算，逐层递归不再重置深度；Crawl 的 origin-absolute 路径不再重复拼接当前目录，且不跟随扫描根外链接。取消或 `MaxTime` 到期返回已完成结果及非 nil context 错误，调用方应同时处理部分结果与错误。扫描改为每目录有界并发：`Threads` 默认 30，设置 1 可串行；Engine 同主机上限同步设为 Threads，实际请求压力可能高于旧串行版本，应根据目标授权和承载显式设置。目录和 wildcard 校准仍串行，Crawl 仅优先未派发字典。响应按派发顺序聚合，窗口包含未聚合的乱序完成响应；取消后等待在途退出并保留成功完成的过滤后结果。连续错误现在同时正确计入 `Response.Error` 和 nil 响应；阈值后停止该目录，最多已有 Threads-1 个后续任务被接纳，成功尾部响应不会重启派发。字数/行数过滤改为使用正文实际计数，可能修正过去零值导致的错误筛选。详见 [目录扫描](../dirscan/README.md)。
 
-- `infoextract.AddRule` 现在复制 `Triggers` 并以 copy-on-write 发布规则列表，修复并发同名替换对旧扫描快照的改写。返回后可复用原触发词切片；nil/零长度切片仍表示 fallback，只有空字符串的非空切片仍永不触发。不改变已有规则顺序、同名替换位置或独立提取入口。
+- 信息提取插件的 `AddRule` 复制 `Triggers` 并以 copy-on-write 发布规则列表，修复并发同名替换对旧扫描快照的改写。返回后可复用原触发词切片。nil 或零长度切片表示直接运行正则，只有空字符串的非空切片永不触发。保留规则顺序和同名替换位置。
 
 - `Serialization` 的文本规则改用共享 AC 筛选候选，仅候选运行正则，安全固定字面量规则直接命中；无法安全触发的规则保留正则 fallback。大小写不敏感的 `rememberMe` 仍走正则，保留 Unicode 折叠匹配，不能用仅 ASCII 的大小写预筛选替代。magic 仍为前缀检查，URL/Base64 流程、1 MiB/128/64 固定预算与结果/证据语义不变。Registry 不新增强制 AC 策略，既有插件选择、注册和缓存接口不变；共享引擎由各插件自行选择使用。
 

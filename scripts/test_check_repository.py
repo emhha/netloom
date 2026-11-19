@@ -144,6 +144,19 @@ class RepositoryChecks(unittest.TestCase):
             errors = checker.check(root)
             self.assertTrue(any("missing required file: Makefile" in error for error in errors))
 
+    def test_retired_infoextract_path_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            usage = root / "passive/plugin_test.go"
+            usage.write_text(f'package passive_test\nimport "{checker.MODULE}/passive/plugins/infoextract"\n')
+            self.assertEqual(checker.check(root), [])
+            (root / "infoextract").mkdir()
+            usage.write_text(f'package passive_test\nimport "{checker.MODULE}/infoextract"\n')
+            errors = checker.check(root)
+            self.assertTrue(any("obsolete plugin directory: infoextract" in error for error in errors))
+            self.assertTrue(any("obsolete infoextract import" in error for error in errors))
+
     def test_upstream_excluded_but_maintained_history_and_provenance_checked(self):
         for name in (
             "dirscan/wordlists/dirsearch/README.upstream.md",

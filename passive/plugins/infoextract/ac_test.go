@@ -7,20 +7,20 @@ import (
 	"github.com/emhha/netloom/ac"
 )
 
-func TestAutomatonCompatibility(t *testing.T) {
-	var shared *ac.Matcher = newAutomaton([]string{"", "he", "she", "he", "\x00\xff"})
+func TestSharedAutomaton(t *testing.T) {
+	shared := ac.New([]string{"", "he", "she", "he", "\x00\xff"})
 	want := map[string]struct{}{"he": {}, "she": {}, "\x00\xff": {}}
 	if got := shared.Search([]byte("ushers\x00\xff")); !reflect.DeepEqual(got, want) {
 		t.Fatalf("compatibility Search = %q, want %q", got, want)
 	}
-	var zero automaton
+	var zero ac.Matcher
 	if got := zero.Search([]byte("anything")); got == nil || len(got) != 0 {
 		t.Fatalf("zero automaton Search = %v", got)
 	}
 }
 
 func TestSharedACTriggerCompatibility(t *testing.T) {
-	e := &InfoExtractor{}
+	e := &extractor{}
 	for _, rule := range []Rule{
 		{Name: "suffix", Pattern: "value", Triggers: []string{"", "he", "he"}},
 		{Name: "overlap", Pattern: "value", Triggers: []string{"she"}},
@@ -30,17 +30,17 @@ func TestSharedACTriggerCompatibility(t *testing.T) {
 		{Name: "empty-only", Pattern: "value", Triggers: []string{"", ""}},
 		{Name: "fallback", Pattern: "value"},
 	} {
-		if err := e.AddRule(rule); err != nil {
+		if err := e.addRule(rule); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, scope := range []string{"body", "header"} {
 		t.Run(scope, func(t *testing.T) {
-			var findings []Finding
+			var findings []finding
 			if scope == "body" {
-				findings = e.ExtractWithContentType([]byte("she\x00\xff value"), nil, "text/plain")
+				findings = e.extract([]byte("she\x00\xff value"), nil, "text/plain")
 			} else {
-				findings = e.ExtractWithContentType(nil, map[string][]string{"X-Test": {"she\x00\xff value"}}, "text/plain")
+				findings = e.extract(nil, map[string][]string{"X-Test": {"she\x00\xff value"}}, "text/plain")
 			}
 			var got []string
 			for _, finding := range findings {
@@ -57,7 +57,7 @@ func TestSharedACTriggerCompatibility(t *testing.T) {
 	}
 	// Rebuilding replaces the matcher rather than mutating published snapshots.
 	old := e.ac
-	if err := e.AddRule(Rule{Name: "suffix", Pattern: "value", Triggers: []string{"new-trigger"}}); err != nil {
+	if err := e.addRule(Rule{Name: "suffix", Pattern: "value", Triggers: []string{"new-trigger"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := old.Search([]byte("he"))["he"]; !ok {

@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 
 	"github.com/emhha/netloom/ac"
-	"github.com/emhha/netloom/httpdata"
 )
 
 const headOnlySize = 100 * 1024 // 100 KB
@@ -24,8 +23,8 @@ type Rule struct {
 	Category    string   // "" = universal | "special" = JS/JSON only
 }
 
-// Finding is a single extraction result.
-type Finding struct {
+// finding is a single extraction result.
+type finding struct {
 	RuleName    string
 	Value       string // full regex match
 	Capture     string // capture group 1, if present
@@ -41,37 +40,32 @@ type compiledRule struct {
 	triggerSet map[string]struct{}
 }
 
-// InfoExtractor is the two-phase sensitive-information extraction engine.
+// extractor is the two-phase sensitive-information extraction engine.
 // It is safe for concurrent use and must not be copied after first use.
-type InfoExtractor struct {
+type extractor struct {
 	mu       sync.RWMutex
-	rules    []compiledRule // ordered, immutable snapshots; published together with ac
+	rules    []compiledRule // ordered, immutable snapshots; published together with the AC index
 	ac       *ac.Matcher    // nil when no triggers exist (all fallback rules)
 	identity uint64
 }
 
 var nextSnapshotIdentity atomic.Uint64
 
-// Snapshot is an immutable ruleset and its matching AC index. It is safe to
-// copy and use concurrently; later AddRule calls do not change its results.
+// snapshot is an immutable ruleset and its matching AC index. It is safe to
+// copy and use concurrently; later addRule calls do not change its results.
 // Its zero value is an empty ruleset with identity zero.
-type Snapshot struct {
+type snapshot struct {
 	rules    []compiledRule
 	ac       *ac.Matcher
 	identity uint64
 }
 
-// Identity returns a process-local cache identity, unique across published
-// ruleset generations and extractor instances. It is not a persistent version
-// or a content hash. Obtain a new Snapshot to observe successful AddRule calls.
-func (s Snapshot) Identity() uint64 { return s.identity }
-
-// Snapshot captures the rules, AC index and identity under the same lock.
-// Even a zero-value InfoExtractor receives its own nonzero initial identity.
-func (e *InfoExtractor) Snapshot() Snapshot {
+// snapshot captures the rules, AC index and identity under the same lock.
+// Even a zero-value extractor receives its own nonzero initial identity.
+func (e *extractor) snapshot() snapshot {
 	e.mu.RLock()
 	if e.identity != 0 {
-		s := Snapshot{rules: e.rules, ac: e.ac, identity: e.identity}
+		s := snapshot{rules: e.rules, ac: e.ac, identity: e.identity}
 		e.mu.RUnlock()
 		return s
 	}
@@ -81,65 +75,41 @@ func (e *InfoExtractor) Snapshot() Snapshot {
 	if e.identity == 0 {
 		e.identity = nextSnapshotIdentity.Add(1)
 	}
-	return Snapshot{rules: e.rules, ac: e.ac, identity: e.identity}
+	return snapshot{rules: e.rules, ac: e.ac, identity: e.identity}
 }
 
-// New returns an InfoExtractor pre-loaded with the built-in ruleset.
-func New() *InfoExtractor {
-	e := &InfoExtractor{}
+func (e *extractor) loadDefaults() {
 	for _, r := range defaultRules() {
-		// ignore compile errors on built-in rules — they are tested
+		// Built-in rule patterns are verified by tests.
 		_ = e.addRuleLocked(r)
 	}
 	e.rebuildAC()
-	return e
 }
 
-// Name identifies the extractor.
-func (e *InfoExtractor) Name() string { return "infoextract" }
-
-// Extract reads resp.Body and
-// resp.Header using resp.ContentType for routing.
-func (e *InfoExtractor) Extract(resp *httpdata.Response) ([]httpdata.Artifact, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	findings := e.ExtractWithContentType(resp.Body, resp.Header, resp.ContentType)
-	arts := make([]httpdata.Artifact, 0, len(findings))
-	for _, f := range findings {
-		v := f.Capture
-		if v == "" {
-			v = f.Value
-		}
-		arts = append(arts, httpdata.Artifact{Type: f.RuleName, Value: v})
-	}
-	return arts, nil
-}
-
-// ExtractWithContentType scans body and header, applying content-type routing.
+// extract scans body and header, applying content-type routing.
 // Binary content-types skip body matching; response headers are still analyzed.
-func (e *InfoExtractor) ExtractWithContentType(
+func (e *extractor) extract(
 	body []byte,
 	header map[string][]string,
 	contentType string,
-) []Finding {
-	return e.Snapshot().ExtractWithContentType(body, header, contentType)
+) []finding {
+	return e.snapshot().extract(body, header, contentType)
 }
 
-// ExtractWithContentType scans both body and headers using this one immutable
-// generation, with the same routing and result semantics as InfoExtractor.
-func (s Snapshot) ExtractWithContentType(
+// extract scans both body and headers using this one immutable
+// generation, with the same routing and result semantics as extractor.
+func (s snapshot) extract(
 	body []byte,
 	header map[string][]string,
 	contentType string,
-) []Finding {
+) []finding {
 	ct := strings.ToLower(contentType)
 	// strip parameters (e.g. "text/html; charset=utf-8")
 	if idx := strings.IndexByte(ct, ';'); idx >= 0 {
 		ct = strings.TrimSpace(ct[:idx])
 	}
 
-	var findings []Finding
+	var findings []finding
 	if !isBinary(ct) {
 		findings = append(findings, s.extractBody(body, ct)...)
 	}
@@ -147,10 +117,10 @@ func (s Snapshot) ExtractWithContentType(
 	return findings
 }
 
-// AddRule compiles and appends a single rule, overwriting any existing rule
+// addRule compiles and appends a single rule, overwriting any existing rule
 // with the same Name. Returns an error if the Pattern is not valid RE2.
 // On error the internal state is not modified.
-func (e *InfoExtractor) AddRule(rule Rule) error {
+func (e *extractor) addRule(rule Rule) error {
 	cr, err := compile(rule)
 	if err != nil {
 		return fmt.Errorf("infoextract.AddRule: %w", err)
@@ -165,7 +135,7 @@ func (e *InfoExtractor) AddRule(rule Rule) error {
 // ─── internal ────────────────────────────────────────────────────────────────
 
 // addRuleLocked compiles and upserts a rule. Must be called with mu held (write).
-func (e *InfoExtractor) addRuleLocked(r Rule) error {
+func (e *extractor) addRuleLocked(r Rule) error {
 	cr, err := compile(r)
 	if err != nil {
 		return err
@@ -175,7 +145,7 @@ func (e *InfoExtractor) addRuleLocked(r Rule) error {
 }
 
 // upsertLocked inserts or replaces by Name. Must be called with mu held (write).
-func (e *InfoExtractor) upsertLocked(cr compiledRule) {
+func (e *extractor) upsertLocked(cr compiledRule) {
 	// Readers retain the slice after releasing mu. Never mutate its backing
 	// array: publish a new rules snapshot under the same lock as its matcher.
 	rules := make([]compiledRule, len(e.rules), len(e.rules)+1)
@@ -192,7 +162,7 @@ func (e *InfoExtractor) upsertLocked(cr compiledRule) {
 
 // rebuildAC rebuilds the Aho-Corasick automaton from current rules.
 // Must be called with mu held (write), or during single-threaded init.
-func (e *InfoExtractor) rebuildAC() {
+func (e *extractor) rebuildAC() {
 	e.identity = nextSnapshotIdentity.Add(1)
 	var keywords []string
 	seen := make(map[string]struct{})
@@ -213,7 +183,7 @@ func (e *InfoExtractor) rebuildAC() {
 
 // extractBody applies content-type routing and runs the two-phase extraction
 // on the body bytes, returning findings with Scope="body".
-func (s Snapshot) extractBody(body []byte, ct string) []Finding {
+func (s snapshot) extractBody(body []byte, ct string) []finding {
 	isJS := ct == "application/javascript" || ct == "text/javascript"
 	isJSON := ct == "application/json"
 	isSpecial := isJS || isJSON
@@ -230,7 +200,7 @@ func (s Snapshot) extractBody(body []byte, ct string) []Finding {
 		hitTriggers = ac.Search(scanBody)
 	}
 
-	var findings []Finding
+	var findings []finding
 	for _, cr := range rules {
 		if cr.Scope == "header" {
 			continue
@@ -250,11 +220,11 @@ func (s Snapshot) extractBody(body []byte, ct string) []Finding {
 
 // extractScope runs the two-phase extraction on content with the given scope
 // ("body" or "header"). Used directly for header scanning.
-func (e *InfoExtractor) extractScope(content []byte, scope string) []Finding {
-	return e.Snapshot().extractScope(content, scope)
+func (e *extractor) extractScope(content []byte, scope string) []finding {
+	return e.snapshot().extractScope(content, scope)
 }
 
-func (s Snapshot) extractScope(content []byte, scope string) []Finding {
+func (s snapshot) extractScope(content []byte, scope string) []finding {
 	rules, ac := s.rules, s.ac
 
 	var hitTriggers map[string]struct{}
@@ -262,7 +232,7 @@ func (s Snapshot) extractScope(content []byte, scope string) []Finding {
 		hitTriggers = ac.Search(content)
 	}
 
-	var findings []Finding
+	var findings []finding
 	for _, cr := range rules {
 		switch cr.Scope {
 		case "body":
@@ -305,7 +275,7 @@ func compile(r Rule) (compiledRule, error) {
 		r.Sensitivity = "low"
 	}
 	// Own the trigger slice, since future rebuilds must use the same keywords
-	// as triggerSet even if the caller reuses its Rule after AddRule returns.
+	// as triggerSet even if the caller reuses its Rule after addRule returns.
 	// Preserve empty elements: only an empty slice means fallback; a rule
 	// containing solely empty keywords never triggered in the original AC.
 	r.Triggers = append([]string(nil), r.Triggers...)
@@ -317,15 +287,15 @@ func compile(r Rule) (compiledRule, error) {
 }
 
 // matchAll runs the compiled regex against content and converts each match to
-// a Finding.
-func matchAll(cr compiledRule, content []byte, scope string) []Finding {
+// a finding.
+func matchAll(cr compiledRule, content []byte, scope string) []finding {
 	matches := cr.re.FindAllSubmatch(content, 257)
 	if len(matches) == 0 {
 		return nil
 	}
-	out := make([]Finding, 0, len(matches))
+	out := make([]finding, 0, len(matches))
 	for _, m := range matches {
-		f := Finding{
+		f := finding{
 			RuleName:    cr.Name,
 			Value:       string(m[0]),
 			Sensitivity: cr.Sensitivity,

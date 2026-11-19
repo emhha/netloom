@@ -3,17 +3,21 @@ package infoextract
 import (
 	"net/http"
 	"testing"
-
-	"github.com/emhha/netloom/httpdata"
 )
+
+func newExtractor() *extractor {
+	e := &extractor{}
+	e.loadDefaults()
+	return e
+}
 
 // TestTwoPhaseAC verifies that Phase 1 (AC) correctly gates Phase 2 (regex).
 func TestTwoPhaseAC(t *testing.T) {
-	e := New()
+	e := newExtractor()
 
 	// Body that contains the AWS trigger but no actual key.
 	body := []byte("some content with AKIA prefix but not a real key")
-	findings := e.ExtractWithContentType(body, nil, "text/html")
+	findings := e.extract(body, nil, "text/html")
 
 	// aws_access_key requires AKIA + exactly 16 uppercase alphanum chars.
 	// "AKIA prefix" does not match the full pattern, so no finding expected.
@@ -27,16 +31,16 @@ func TestTwoPhaseAC(t *testing.T) {
 // TestFallbackRulesAlwaysRun verifies that rules with no Triggers run
 // unconditionally even without an AC hit.
 func TestFallbackRulesAlwaysRun(t *testing.T) {
-	e := New()
-	if err := e.AddRule(Rule{
+	e := newExtractor()
+	if err := e.addRule(Rule{
 		Name: "email", Pattern: `[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`,
 		Scope: "all", Sensitivity: "low",
 	}); err != nil {
-		t.Fatalf("AddRule: %v", err)
+		t.Fatalf("addRule: %v", err)
 	}
 
 	body := []byte("contact us at admin@example.com for more info")
-	findings := e.ExtractWithContentType(body, nil, "text/html")
+	findings := e.extract(body, nil, "text/html")
 
 	found := false
 	for _, f := range findings {
@@ -51,10 +55,10 @@ func TestFallbackRulesAlwaysRun(t *testing.T) {
 
 // TestAWSKey checks that a real AWS access key is detected.
 func TestAWSKey(t *testing.T) {
-	e := New()
+	e := newExtractor()
 
 	body := []byte("key=AKIAIOSFODNN7EXAMPLE other stuff")
-	findings := e.ExtractWithContentType(body, nil, "text/html")
+	findings := e.extract(body, nil, "text/html")
 
 	found := false
 	for _, f := range findings {
@@ -72,9 +76,9 @@ func TestAWSKey(t *testing.T) {
 
 // TestBinaryContentTypeSkipped verifies image/* returns nil.
 func TestBinaryContentTypeSkipped(t *testing.T) {
-	e := New()
+	e := newExtractor()
 	body := []byte("AKIAIOSFODNN7EXAMPLE")
-	findings := e.ExtractWithContentType(body, nil, "image/png")
+	findings := e.extract(body, nil, "image/png")
 	if findings != nil {
 		t.Errorf("expected nil for binary content-type, got %v", findings)
 	}
@@ -82,10 +86,10 @@ func TestBinaryContentTypeSkipped(t *testing.T) {
 
 // TestHeaderScan verifies header-scope rules fire on serialized headers.
 func TestHeaderScan(t *testing.T) {
-	e := New()
+	e := newExtractor()
 
 	// Add a header-scoped rule for testing.
-	err := e.AddRule(Rule{
+	err := e.addRule(Rule{
 		Name:        "test_header_bearer",
 		Pattern:     `Bearer\s+([A-Za-z0-9._\-]+)`,
 		Color:       "red",
@@ -94,11 +98,11 @@ func TestHeaderScan(t *testing.T) {
 		Triggers:    []string{"Bearer "},
 	})
 	if err != nil {
-		t.Fatalf("AddRule: %v", err)
+		t.Fatalf("addRule: %v", err)
 	}
 
 	h := http.Header{"Authorization": []string{"Bearer mytoken123"}}
-	findings := e.ExtractWithContentType(nil, h, "text/html")
+	findings := e.extract(nil, h, "text/html")
 
 	found := false
 	for _, f := range findings {
@@ -113,19 +117,19 @@ func TestHeaderScan(t *testing.T) {
 
 // TestSpecialCategoryJSOnly verifies linkfinder only runs for JS/JSON content.
 func TestSpecialCategoryJSOnly(t *testing.T) {
-	e := New()
-	if err := e.AddRule(Rule{
+	e := newExtractor()
+	if err := e.addRule(Rule{
 		Name: "linkfinder", Pattern: `(?:"|')(/(?:api|v[0-9]+|graphql)/[a-zA-Z0-9_/\-?=&]{1,200})(?:"|')`,
 		Scope: "body", Sensitivity: "low", Category: "special",
 		Triggers: []string{"/api/", "/v1/", "/v2/", "/graphql"},
 	}); err != nil {
-		t.Fatalf("AddRule: %v", err)
+		t.Fatalf("addRule: %v", err)
 	}
 
 	jsBody := []byte(`"/api/v1/users" some js content`)
 
 	// Should fire for JS content-type.
-	jsFindings := e.ExtractWithContentType(jsBody, nil, "application/javascript")
+	jsFindings := e.extract(jsBody, nil, "application/javascript")
 	foundInJS := false
 	for _, f := range jsFindings {
 		if f.RuleName == "linkfinder" {
@@ -137,7 +141,7 @@ func TestSpecialCategoryJSOnly(t *testing.T) {
 	}
 
 	// Should NOT fire for HTML content-type.
-	htmlFindings := e.ExtractWithContentType(jsBody, nil, "text/html")
+	htmlFindings := e.extract(jsBody, nil, "text/html")
 	for _, f := range htmlFindings {
 		if f.RuleName == "linkfinder" {
 			t.Error("linkfinder should not fire for HTML content-type")
@@ -147,14 +151,14 @@ func TestSpecialCategoryJSOnly(t *testing.T) {
 
 // TestHeadOnlyJS verifies that JS bodies larger than 100KB are truncated.
 func TestHeadOnlyJS(t *testing.T) {
-	e := New()
+	e := newExtractor()
 
 	// Build a 200KB body: first 1KB has a valid JWT, rest is junk.
 	jwtToken := []byte(`eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c`)
 	body := make([]byte, 200*1024)
 	copy(body, jwtToken)
 
-	findings := e.ExtractWithContentType(body, nil, "application/javascript")
+	findings := e.extract(body, nil, "application/javascript")
 	found := false
 	for _, f := range findings {
 		if f.RuleName == "jwt_token" {
@@ -166,42 +170,12 @@ func TestHeadOnlyJS(t *testing.T) {
 	}
 }
 
-// TestExtractInterface verifies the response extractor contract.
-func TestExtractInterface(t *testing.T) {
-	var _ interface {
-		Extract(*httpdata.Response) ([]httpdata.Artifact, error)
-	} = (*InfoExtractor)(nil)
-}
-
-// TestExtractResp verifies Extract converts Findings to Artifacts.
-func TestExtractResp(t *testing.T) {
-	e := New()
-	resp := &httpdata.Response{
-		Body:        []byte("key=AKIAIOSFODNN7EXAMPLE"),
-		Header:      nil,
-		ContentType: "text/html",
-	}
-	arts, err := e.Extract(resp)
-	if err != nil {
-		t.Fatalf("Extract error: %v", err)
-	}
-	found := false
-	for _, a := range arts {
-		if a.Type == "aws_access_key" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected aws_access_key artifact from Extract")
-	}
-}
-
 // TestAddRuleSameNameOverwrite verifies same-name rules are deduplicated.
 func TestAddRuleSameNameOverwrite(t *testing.T) {
-	e := New()
+	e := newExtractor()
 
 	// Add custom rule with same name as built-in; it uses a different pattern.
-	err := e.AddRule(Rule{
+	err := e.addRule(Rule{
 		Name:        "aws_access_key",
 		Pattern:     `CUSTOM_([a-z]+)`,
 		Color:       "green",
@@ -210,7 +184,7 @@ func TestAddRuleSameNameOverwrite(t *testing.T) {
 		Triggers:    []string{"CUSTOM_"},
 	})
 	if err != nil {
-		t.Fatalf("AddRule: %v", err)
+		t.Fatalf("addRule: %v", err)
 	}
 
 	// Count how many "aws_access_key" rules exist (should be exactly 1).
@@ -227,7 +201,7 @@ func TestAddRuleSameNameOverwrite(t *testing.T) {
 		t.Errorf("expected exactly 1 rule named 'aws_access_key', got %d", count)
 	}
 
-	findings := e.ExtractWithContentType([]byte("CUSTOM_replacement AKIAIOSFODNN7EXAMPLE"), nil, "text/html")
+	findings := e.extract([]byte("CUSTOM_replacement AKIAIOSFODNN7EXAMPLE"), nil, "text/html")
 	count = 0
 	for _, f := range findings {
 		if f.RuleName == "aws_access_key" {
@@ -242,9 +216,9 @@ func TestAddRuleSameNameOverwrite(t *testing.T) {
 	}
 }
 
-// TestAddRuleInvalidPattern verifies AddRule returns error without mutation.
+// TestAddRuleInvalidPattern verifies addRule returns error without mutation.
 func TestAddRuleInvalidPattern(t *testing.T) {
-	e := New()
+	e := newExtractor()
 	countBefore := func() int {
 		e.mu.RLock()
 		defer e.mu.RUnlock()
@@ -252,7 +226,7 @@ func TestAddRuleInvalidPattern(t *testing.T) {
 	}
 	before := countBefore()
 
-	err := e.AddRule(Rule{
+	err := e.addRule(Rule{
 		Name:    "bad_rule",
 		Pattern: `[invalid(`,
 	})
@@ -266,15 +240,15 @@ func TestAddRuleInvalidPattern(t *testing.T) {
 
 // TestInternalIPFallback checks that internal IPs are detected without triggers.
 func TestInternalIPFallback(t *testing.T) {
-	e := New()
-	if err := e.AddRule(Rule{
+	e := newExtractor()
+	if err := e.addRule(Rule{
 		Name: "internal_ip", Pattern: `(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)`,
 		Scope: "all", Sensitivity: "medium",
 	}); err != nil {
-		t.Fatalf("AddRule: %v", err)
+		t.Fatalf("addRule: %v", err)
 	}
 	body := []byte("connect to 192.168.1.100 for service")
-	findings := e.ExtractWithContentType(body, nil, "text/html")
+	findings := e.extract(body, nil, "text/html")
 
 	found := false
 	for _, f := range findings {
@@ -306,7 +280,7 @@ func TestDefaultRulesHighSensitivityOnly(t *testing.T) {
 			t.Errorf("removed rule %q returned to defaults", rule.Name)
 		}
 	}
-	for _, rule := range New().rules {
+	for _, rule := range newExtractor().rules {
 		if removed[rule.Name] {
 			t.Errorf("removed rule %q registered by New", rule.Name)
 		}
