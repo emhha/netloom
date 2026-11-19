@@ -1,6 +1,6 @@
-// Frozen pre-AC implementation for independent equivalence and benchmarks.
-// Keep production optimizations out of this baseline.
-package plugins
+// Package serialization provides a passive plugin for serialization hints in
+// captured HTTP exchanges.
+package serialization
 
 import (
 	"bytes"
@@ -16,13 +16,18 @@ import (
 	"github.com/emhha/netloom/passive"
 )
 
-// serializationLinear identifies serialization clues in captured HTTP exchanges.
+// Plugin identifies serialization clues in captured HTTP exchanges.
 // Its zero value is ready to use. It never deserializes objects or sends probes.
-type serializationLinear struct{}
+type Plugin struct{}
 
-// serializationLinearFinding describes evidence, not an exploitable entry point.
+var _ passive.Plugin = Plugin{}
+
+// New returns a ready-to-use passive plugin.
+func New() *Plugin { return &Plugin{} }
+
+// Finding describes evidence, not an exploitable entry point.
 // Evidence is a static rule label, never a captured payload or credential.
-type serializationLinearFinding struct {
+type Finding struct {
 	Format   string `json:"format"`
 	Rule     string `json:"rule"`
 	Strength string `json:"strength"`
@@ -31,36 +36,36 @@ type serializationLinearFinding struct {
 	Evidence string `json:"evidence"`
 }
 
-func (serializationLinear) Metadata() passive.Metadata {
+func (Plugin) Metadata() passive.Metadata {
 	return passive.Metadata{ID: "serialization", Version: "1", Description: "纯被动序列化格式及反序列化报错线索，不判定漏洞"}
 }
 
 // CacheKey disables reuse: scanning is bounded, and captured credentials are not
 // retained as part of an extra cache key construction.
-func (serializationLinear) CacheKey(passive.Input) string { return "" }
+func (Plugin) CacheKey(passive.Input) string { return "" }
 
 const (
-	serializationLinearBytes    = 1 << 20
-	serializationLinearSurfaces = 128
-	serializationLinearFindings = 64
+	serializationBytes    = 1 << 20
+	serializationSurfaces = 128
+	serializationFindings = 64
 )
 
-type serializationLinearScan struct {
+type serializationScan struct {
 	ctx                 context.Context
 	result              passive.Result
-	findings            []serializationLinearFinding
+	findings            []Finding
 	seen                map[string]bool
 	remaining, surfaces int
 }
 
-func (serializationLinear) Analyze(ctx context.Context, in passive.Input) (passive.Result, error) {
+func (Plugin) Analyze(ctx context.Context, in passive.Input) (passive.Result, error) {
 	if err := ctx.Err(); err != nil {
 		return passive.Result{}, err
 	}
 	if in.Request == nil || in.Response == nil {
 		return passive.Result{}, fmt.Errorf("serialization: request and response are required")
 	}
-	s := serializationLinearScan{ctx: ctx, remaining: serializationLinearBytes, seen: make(map[string]bool)}
+	s := serializationScan{ctx: ctx, remaining: serializationBytes, seen: make(map[string]bool)}
 	s.result.Truncated = in.Response.BodyTruncated
 	requestURL := s.bound(in.Request.URL)
 	s.scan([]byte(requestURL), "request.url", "raw", true)
@@ -80,9 +85,9 @@ func (serializationLinear) Analyze(ctx context.Context, in passive.Input) (passi
 	s.scan([]byte(s.bound(in.Response.ContentType)), "response.content_type", "raw", false)
 	s.scan(in.Response.Body, "response.body", "raw", true)
 	data, err := json.Marshal(struct {
-		Findings    []serializationLinearFinding `json:"findings"`
-		PassiveOnly bool                         `json:"passive_only"`
-	}{append([]serializationLinearFinding{}, s.findings...), true})
+		Findings    []Finding `json:"findings"`
+		PassiveOnly bool      `json:"passive_only"`
+	}{append([]Finding{}, s.findings...), true})
 	s.result.Data = data
 	if err != nil {
 		return s.result, err
@@ -91,7 +96,7 @@ func (serializationLinear) Analyze(ctx context.Context, in passive.Input) (passi
 }
 
 // Bound strings before converting to byte slices or decoding them.
-func (s *serializationLinearScan) bound(v string) string {
+func (s *serializationScan) bound(v string) string {
 	if len(v) > s.remaining {
 		s.result.Truncated = true
 		return v[:s.remaining]
@@ -99,13 +104,13 @@ func (s *serializationLinearScan) bound(v string) string {
 	return v
 }
 
-func (s *serializationLinearScan) headers(headers map[string][]string, scope string) {
+func (s *serializationScan) headers(headers map[string][]string, scope string) {
 	if len(headers) == 0 || s.ctx.Err() != nil {
 		return
 	}
 	// Reject oversized maps before allocating/sorting their keys. All other
 	// header preprocessing, including empty values, is bounded as well.
-	if len(headers) > serializationLinearSurfaces || s.remaining == 0 || s.surfaces >= serializationLinearSurfaces {
+	if len(headers) > serializationSurfaces || s.remaining == 0 || s.surfaces >= serializationSurfaces {
 		s.result.Truncated = true
 		return
 	}
@@ -131,15 +136,15 @@ func (s *serializationLinearScan) headers(headers map[string][]string, scope str
 			}
 		}
 		values := headers[key]
-		if len(values) > serializationLinearSurfaces {
+		if len(values) > serializationSurfaces {
 			s.result.Truncated = true
-			values = values[:serializationLinearSurfaces]
+			values = values[:serializationSurfaces]
 		}
 		for _, value := range values {
 			if s.ctx.Err() != nil {
 				return
 			}
-			if s.remaining == 0 || s.surfaces >= serializationLinearSurfaces {
+			if s.remaining == 0 || s.surfaces >= serializationSurfaces {
 				s.result.Truncated = true
 				return
 			}
@@ -154,7 +159,7 @@ func (s *serializationLinearScan) headers(headers map[string][]string, scope str
 
 // fields expands query/form values without allocating an unbounded parameter
 // map. Names are neither emitted nor interpreted; '+' follows form semantics.
-func (s *serializationLinearScan) fields(data []byte, scope string) {
+func (s *serializationScan) fields(data []byte, scope string) {
 	if len(data) > s.remaining {
 		data = data[:s.remaining]
 		s.result.Truncated = true
@@ -163,7 +168,7 @@ func (s *serializationLinearScan) fields(data []byte, scope string) {
 		if s.ctx.Err() != nil {
 			return
 		}
-		if count >= serializationLinearSurfaces || s.surfaces >= serializationLinearSurfaces || s.remaining == 0 {
+		if count >= serializationSurfaces || s.surfaces >= serializationSurfaces || s.remaining == 0 {
 			s.result.Truncated = true
 			return
 		}
@@ -188,7 +193,7 @@ func (s *serializationLinearScan) fields(data []byte, scope string) {
 	}
 }
 
-func (s *serializationLinearScan) add(format, rule, strength, scope, encoding string) {
+func (s *serializationScan) add(format, rule, strength, scope, encoding string) {
 	// A response can be documentation, reflected input, or a sample download.
 	if strings.HasPrefix(scope, "response.") && strength == "strong" && !strings.HasPrefix(rule, "error.") {
 		strength = "medium"
@@ -197,21 +202,21 @@ func (s *serializationLinearScan) add(format, rule, strength, scope, encoding st
 	if s.seen[key] {
 		return
 	}
-	if len(s.findings) >= serializationLinearFindings {
+	if len(s.findings) >= serializationFindings {
 		s.result.Truncated = true
 		return
 	}
 	s.seen[key] = true
-	s.findings = append(s.findings, serializationLinearFinding{Format: format, Rule: rule, Strength: strength, Scope: scope, Encoding: encoding, Evidence: rule})
+	s.findings = append(s.findings, Finding{Format: format, Rule: rule, Strength: strength, Scope: scope, Encoding: encoding, Evidence: rule})
 	s.result.Artifacts = append(s.result.Artifacts, passive.Artifact{Type: "serialization_hint", Value: format + " (" + strength + ")", Rule: rule, Scope: scope})
 }
 
-type serializationLinearMagic struct {
+type serializationMagic struct {
 	prefix                 []byte
 	format, rule, strength string
 }
 
-var serializationLinearMagics = []serializationLinearMagic{
+var serializationMagics = []serializationMagic{
 	{[]byte{0xac, 0xed, 0, 5}, "java-object-stream", "magic.java", "strong"},
 	{[]byte{0x80, 2}, "python-pickle", "magic.pickle2", "strong"},
 	{[]byte{0x80, 3}, "python-pickle", "magic.pickle3", "strong"},
@@ -226,57 +231,63 @@ var serializationLinearMagics = []serializationLinearMagic{
 	{[]byte{0x1f, 0x8b, 8}, "compressed-data", "compression.gzip", "weak"},
 }
 
-type serializationLinearRule struct {
+type serializationRule struct {
 	re                   *regexp.Regexp
 	format, id, strength string
+	triggers             []string
+	literal              bool
 }
 
-func serialLinearRule(pattern, format, id, strength string) serializationLinearRule {
-	return serializationLinearRule{re: regexp.MustCompile(pattern), format: format, id: id, strength: strength}
+func serialRule(pattern, format, id, strength string) serializationRule {
+	rule := serializationRule{re: regexp.MustCompile(pattern), format: format, id: id, strength: strength, triggers: serializationTriggers[pattern]}
+	if literals, ok := serializationLiteralChoices(pattern); ok {
+		rule.triggers, rule.literal = literals, true
+	}
+	return rule
 }
 
-var serializationLinearRules = []serializationLinearRule{
-	serialLinearRule(`(?:^|[^A-Za-z0-9_])[OC]:[0-9]+:"[^"\r\n]*":`, "php-serialized", "text.php-object", "strong"),
-	serialLinearRule(`(?:^|[^A-Za-z0-9_])a:[0-9]+:\{`, "php-serialized", "text.php-array", "medium"),
-	serialLinearRule(`(?:^|[^A-Za-z0-9_])s:[0-9]+:"`, "php-serialized", "text.php-string", "weak"),
-	serialLinearRule(`phar://|__HALT_COMPILER\s*\(`, "php-phar", "text.phar", "medium"),
-	serialLinearRule(`<java\s+version\s*=|class\s*=\s*"java\.lang\.ProcessBuilder"|<void\s+method\s*=`, "java-xml", "text.java-xml", "medium"),
-	serialLinearRule(`<(?:dynamic-proxy|sorted-set|tree-map|converter)(?:\s|>)`, "java-xstream", "text.xstream", "medium"),
-	serialLinearRule(`!!python/(?:object(?:/apply|/new)?|name):`, "python-yaml", "text.python-yaml", "strong"),
-	serialLinearRule(`!!javax\.script\.ScriptEngineManager`, "java-yaml", "text.java-yaml", "strong"),
-	serialLinearRule(`!![A-Za-z_][\w.]*|tag:yaml\.org,2002`, "yaml-tag", "text.yaml-tag", "weak"),
-	serialLinearRule(`"@(?:type|class)"\s*:|\[\s*"[a-z][\w.]+"\s*,\s*\{`, "java-json", "text.java-json-type", "weak"),
-	serialLinearRule(`"\$type"\s*:|TypeNameHandling`, "dotnet-json", "text.dotnet-json-type", "weak"),
-	serialLinearRule(`c(?:__builtin__|builtins)\n|c(?:os|posix|nt)\nsystem\n`, "python-pickle", "text.pickle-global", "strong"),
-	serialLinearRule(`__reduce__|\bGLOBAL\b`, "python-pickle", "text.pickle-name", "weak"),
-	serialLinearRule(`_\$\$ND_FUNC\$\$_`, "node-serialize", "text.node-function", "strong"),
-	serialLinearRule(`function\s*\([^)]*\)\s*\{[^\r\n]{0,256}child_process`, "node-function", "text.node-child-process", "medium"),
-	serialLinearRule(`System\.Runtime\.Serialization`, "dotnet-serialization", "text.dotnet-namespace", "weak"),
-	serialLinearRule(`(?i)\brememberMe\s*=`, "encrypted-cookie-candidate", "context.remember-me", "weak"),
-	serialLinearRule(`__VIEWSTATE`, "dotnet-viewstate", "context.viewstate", "weak"),
-	serialLinearRule(`application/x-java-serialized-object`, "java-object-stream", "context.java-content-type", "medium"),
-	serialLinearRule(`application/x-hessian`, "hessian", "context.hessian-content-type", "medium"),
-	serialLinearRule(`application/x-amf|/messagebroker/amf`, "amf", "context.amf", "weak"),
-	serialLinearRule(`application/octet-stream`, "binary-data", "context.octet-stream", "weak"),
-	serialLinearRule(`/(?:wls-wsat|_async)/|/invoker/JMXInvokerServlet`, "java-remoting", "context.java-path", "weak"),
-	serialLinearRule(`^t3 [0-9]+\.[0-9]+`, "weblogic-t3", "magic.t3", "strong"),
+var serializationRules = []serializationRule{
+	serialRule(`(?:^|[^A-Za-z0-9_])[OC]:[0-9]+:"[^"\r\n]*":`, "php-serialized", "text.php-object", "strong"),
+	serialRule(`(?:^|[^A-Za-z0-9_])a:[0-9]+:\{`, "php-serialized", "text.php-array", "medium"),
+	serialRule(`(?:^|[^A-Za-z0-9_])s:[0-9]+:"`, "php-serialized", "text.php-string", "weak"),
+	serialRule(`phar://|__HALT_COMPILER\s*\(`, "php-phar", "text.phar", "medium"),
+	serialRule(`<java\s+version\s*=|class\s*=\s*"java\.lang\.ProcessBuilder"|<void\s+method\s*=`, "java-xml", "text.java-xml", "medium"),
+	serialRule(`<(?:dynamic-proxy|sorted-set|tree-map|converter)(?:\s|>)`, "java-xstream", "text.xstream", "medium"),
+	serialRule(`!!python/(?:object(?:/apply|/new)?|name):`, "python-yaml", "text.python-yaml", "strong"),
+	serialRule(`!!javax\.script\.ScriptEngineManager`, "java-yaml", "text.java-yaml", "strong"),
+	serialRule(`!![A-Za-z_][\w.]*|tag:yaml\.org,2002`, "yaml-tag", "text.yaml-tag", "weak"),
+	serialRule(`"@(?:type|class)"\s*:|\[\s*"[a-z][\w.]+"\s*,\s*\{`, "java-json", "text.java-json-type", "weak"),
+	serialRule(`"\$type"\s*:|TypeNameHandling`, "dotnet-json", "text.dotnet-json-type", "weak"),
+	serialRule(`c(?:__builtin__|builtins)\n|c(?:os|posix|nt)\nsystem\n`, "python-pickle", "text.pickle-global", "strong"),
+	serialRule(`__reduce__|\bGLOBAL\b`, "python-pickle", "text.pickle-name", "weak"),
+	serialRule(`_\$\$ND_FUNC\$\$_`, "node-serialize", "text.node-function", "strong"),
+	serialRule(`function\s*\([^)]*\)\s*\{[^\r\n]{0,256}child_process`, "node-function", "text.node-child-process", "medium"),
+	serialRule(`System\.Runtime\.Serialization`, "dotnet-serialization", "text.dotnet-namespace", "weak"),
+	serialRule(`(?i)\brememberMe\s*=`, "encrypted-cookie-candidate", "context.remember-me", "weak"),
+	serialRule(`__VIEWSTATE`, "dotnet-viewstate", "context.viewstate", "weak"),
+	serialRule(`application/x-java-serialized-object`, "java-object-stream", "context.java-content-type", "medium"),
+	serialRule(`application/x-hessian`, "hessian", "context.hessian-content-type", "medium"),
+	serialRule(`application/x-amf|/messagebroker/amf`, "amf", "context.amf", "weak"),
+	serialRule(`application/octet-stream`, "binary-data", "context.octet-stream", "weak"),
+	serialRule(`/(?:wls-wsat|_async)/|/invoker/JMXInvokerServlet`, "java-remoting", "context.java-path", "weak"),
+	serialRule(`^t3 [0-9]+\.[0-9]+`, "weblogic-t3", "magic.t3", "strong"),
 }
-var serializationLinearErrors = []serializationLinearRule{
-	serialLinearRule(`StreamCorruptedException|InvalidClassException|java\.io\.ObjectInputStream`, "java-object-stream", "error.java", "medium"),
-	serialLinearRule(`unserialize\(\): Error at offset|__wakeup|__destruct`, "php-serialized", "error.php", "medium"),
-	serialLinearRule(`UnpicklingError`, "python-pickle", "error.pickle", "medium"),
-	serialLinearRule(`autoType is not support|set autoTypeSupport|ForbiddenClassException`, "java-json-or-xstream", "error.java-type", "medium"),
-	serialLinearRule(`Global tag is not allowed|ConstructorException|Invalid element qName:`, "yaml-or-java-xml", "error.tag", "medium"),
-	serialLinearRule(`InvalidDefinitionException[^\r\n]{0,256}subtype resolution was not allowed`, "java-json", "error.jackson", "medium"),
-	serialLinearRule(`SerializationException|System\.Runtime\.Serialization`, "dotnet-serialization", "error.dotnet", "medium"),
+var serializationErrors = []serializationRule{
+	serialRule(`StreamCorruptedException|InvalidClassException|java\.io\.ObjectInputStream`, "java-object-stream", "error.java", "medium"),
+	serialRule(`unserialize\(\): Error at offset|__wakeup|__destruct`, "php-serialized", "error.php", "medium"),
+	serialRule(`UnpicklingError`, "python-pickle", "error.pickle", "medium"),
+	serialRule(`autoType is not support|set autoTypeSupport|ForbiddenClassException`, "java-json-or-xstream", "error.java-type", "medium"),
+	serialRule(`Global tag is not allowed|ConstructorException|Invalid element qName:`, "yaml-or-java-xml", "error.tag", "medium"),
+	serialRule(`InvalidDefinitionException[^\r\n]{0,256}subtype resolution was not allowed`, "java-json", "error.jackson", "medium"),
+	serialRule(`SerializationException|System\.Runtime\.Serialization`, "dotnet-serialization", "error.dotnet", "medium"),
 }
-var serializationLinearBase64 = regexp.MustCompile(`[A-Za-z0-9+/_-]{2,}={0,2}`)
+var serializationBase64 = regexp.MustCompile(`[A-Za-z0-9+/_-]{2,}={0,2}`)
 
-func (s *serializationLinearScan) scan(data []byte, scope, encoding string, expand bool) {
+func (s *serializationScan) scan(data []byte, scope, encoding string, expand bool) {
 	if len(data) == 0 || s.ctx.Err() != nil {
 		return
 	}
-	if s.surfaces >= serializationLinearSurfaces || s.remaining == 0 {
+	if s.surfaces >= serializationSurfaces || s.remaining == 0 {
 		s.result.Truncated = true
 		return
 	}
@@ -286,7 +297,7 @@ func (s *serializationLinearScan) scan(data []byte, scope, encoding string, expa
 		s.result.Truncated = true
 	}
 	s.remaining -= len(data)
-	for _, magic := range serializationLinearMagics {
+	for _, magic := range serializationMagics {
 		if bytes.HasPrefix(data, magic.prefix) {
 			s.add(magic.format, magic.rule, magic.strength, scope, encoding)
 		}
@@ -295,18 +306,9 @@ func (s *serializationLinearScan) scan(data []byte, scope, encoding string, expa
 	if len(data) >= 2 && data[0]&15 == 8 && data[0]>>4 <= 7 && (int(data[0])*256+int(data[1]))%31 == 0 {
 		s.add("compressed-data", "compression.zlib", "weak", scope, encoding)
 	}
-	for _, rule := range serializationLinearRules {
-		if rule.re.Match(data) {
-			s.add(rule.format, rule.id, rule.strength, scope, encoding)
-		}
-	}
-	if strings.HasPrefix(scope, "response.") {
-		for _, rule := range serializationLinearErrors {
-			if rule.re.Match(data) {
-				s.add(rule.format, rule.id, rule.strength, scope, encoding)
-			}
-		}
-	}
+	serializationText.match(data, strings.HasPrefix(scope, "response."), func(rule serializationRule) {
+		s.add(rule.format, rule.id, rule.strength, scope, encoding)
+	})
 	if !expand {
 		return
 	}
@@ -322,19 +324,19 @@ func (s *serializationLinearScan) scan(data []byte, scope, encoding string, expa
 	s.base64(data, scope, "base64")
 }
 
-func (s *serializationLinearScan) base64(data []byte, scope, encoding string) {
+func (s *serializationScan) base64(data []byte, scope, encoding string) {
 	// Limit token enumeration as well as decoded bytes. This prevents large
 	// collections of small tokens from turning into unbounded decoding work.
-	matches := serializationLinearBase64.FindAllIndex(data, serializationLinearSurfaces+1)
-	if len(matches) > serializationLinearSurfaces {
+	matches := serializationBase64.FindAllIndex(data, serializationSurfaces+1)
+	if len(matches) > serializationSurfaces {
 		s.result.Truncated = true
-		matches = matches[:serializationLinearSurfaces]
+		matches = matches[:serializationSurfaces]
 	}
 	for _, at := range matches {
 		if s.ctx.Err() != nil {
 			return
 		}
-		if s.remaining == 0 || s.surfaces >= serializationLinearSurfaces {
+		if s.remaining == 0 || s.surfaces >= serializationSurfaces {
 			s.result.Truncated = true
 			return
 		}

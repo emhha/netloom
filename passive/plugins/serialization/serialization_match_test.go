@@ -1,4 +1,4 @@
-package plugins
+package serialization
 
 import (
 	"bytes"
@@ -72,7 +72,7 @@ func TestSerializationACMatchesLinear(t *testing.T) {
 		inputs := []passive.Input{serialInput(data), serialInput([]byte(base64.StdEncoding.EncodeToString(data)))}
 		inputs[0].Response.Body = data
 		for _, in := range inputs {
-			got, err := (Serialization{}).Analyze(context.Background(), in)
+			got, err := (Plugin{}).Analyze(context.Background(), in)
 			want, oldErr := (serializationLinear{}).Analyze(context.Background(), in)
 			if err != nil || oldErr != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("pipeline mismatch data=%q\ngot=%+v\nwant=%+v\nerr=%v %v", sample, got, want, err, oldErr)
@@ -190,7 +190,7 @@ func BenchmarkSerializationAnalyze(b *testing.B) {
 			b.Run("AC", func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
-					if _, err := (Serialization{}).Analyze(context.Background(), in); err != nil {
+					if _, err := (Plugin{}).Analyze(context.Background(), in); err != nil {
 						b.Fatal(err)
 					}
 				}

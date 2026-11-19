@@ -1,4 +1,4 @@
-package plugins
+package serialization
 
 import (
 	"context"
@@ -17,11 +17,11 @@ import (
 func serialInput(body []byte) passive.Input {
 	return passive.Input{Request: &httpdata.Request{URL: "https://example.test/", Body: body}, Response: &httpdata.Response{}}
 }
-func serialFindings(t *testing.T, result passive.Result) []SerializationFinding {
+func serialFindings(t *testing.T, result passive.Result) []Finding {
 	t.Helper()
 	var data struct {
-		Findings    []SerializationFinding `json:"findings"`
-		PassiveOnly bool                   `json:"passive_only"`
+		Findings    []Finding `json:"findings"`
+		PassiveOnly bool      `json:"passive_only"`
 	}
 	if err := json.Unmarshal(result.Data, &data); err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func serialFindings(t *testing.T, result passive.Result) []SerializationFinding 
 	}
 	return data.Findings
 }
-func serialHas(findings []SerializationFinding, rule, strength, scope, encoding string) bool {
+func serialHas(findings []Finding, rule, strength, scope, encoding string) bool {
 	for _, f := range findings {
 		if f.Rule == rule && f.Strength == strength && f.Scope == scope && f.Encoding == encoding {
 			return true
@@ -42,7 +42,7 @@ func serialHas(findings []SerializationFinding, rule, strength, scope, encoding 
 func TestSerializationMagic(t *testing.T) {
 	for _, magic := range serializationMagics {
 		t.Run(magic.rule, func(t *testing.T) {
-			result, err := (Serialization{}).Analyze(context.Background(), serialInput(magic.prefix))
+			result, err := (Plugin{}).Analyze(context.Background(), serialInput(magic.prefix))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,7 +68,7 @@ func TestSerializationLocationsAndEncodings(t *testing.T) {
 			case "response.body":
 				in.Response.Body = []byte(token)
 			}
-			result, err := (Serialization{}).Analyze(context.Background(), in)
+			result, err := (Plugin{}).Analyze(context.Background(), in)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,7 +88,7 @@ func TestSerializationLocationsAndEncodings(t *testing.T) {
 		}
 	}
 	for _, test := range []struct{ token, rule string }{{"/wEP", "magic.viewstate"}, {"gAQ=", "magic.pickle4"}, {"gAWVAAAAAAAAAAA=", "magic.pickle5"}} {
-		result, err := (Serialization{}).Analyze(context.Background(), serialInput([]byte(test.token)))
+		result, err := (Plugin{}).Analyze(context.Background(), serialInput([]byte(test.token)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func TestSerializationTextAndErrors(t *testing.T) {
 		{"cposix\nsystem\n", "text.pickle-global", "strong"},
 	}
 	for _, test := range tests {
-		result, err := (Serialization{}).Analyze(context.Background(), serialInput([]byte(test.body)))
+		result, err := (Plugin{}).Analyze(context.Background(), serialInput([]byte(test.body)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,21 +125,21 @@ func TestSerializationTextAndErrors(t *testing.T) {
 		}
 	}
 	in := serialInput([]byte("StreamCorruptedException"))
-	result, _ := (Serialization{}).Analyze(context.Background(), in)
+	result, _ := (Plugin{}).Analyze(context.Background(), in)
 	for _, f := range serialFindings(t, result) {
 		if strings.HasPrefix(f.Rule, "error.") {
 			t.Fatal("request treated as response error")
 		}
 	}
 	in.Response.Body = []byte("java.io.StreamCorruptedException: invalid stream header")
-	result, _ = (Serialization{}).Analyze(context.Background(), in)
+	result, _ = (Plugin{}).Analyze(context.Background(), in)
 	if !serialHas(serialFindings(t, result), "error.java", "medium", "response.body", "raw") {
 		t.Fatalf("missing error: %s", result.Data)
 	}
 }
 func TestSerializationNegativeAndPrivacy(t *testing.T) {
 	for _, body := range []string{"rO0AB", "AC ED 00 05", "eJ", "O: hello", "java.example.Business", "plain text", "my-secret-credential"} {
-		result, err := (Serialization{}).Analyze(context.Background(), serialInput([]byte(body)))
+		result, err := (Plugin{}).Analyze(context.Background(), serialInput([]byte(body)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -150,7 +150,7 @@ func TestSerializationNegativeAndPrivacy(t *testing.T) {
 	secret := `O:25:"SuperSecretCredentialName":0:{}`
 	in := serialInput([]byte(secret))
 	before, _ := json.Marshal(in)
-	result, _ := (Serialization{}).Analyze(context.Background(), in)
+	result, _ := (Plugin{}).Analyze(context.Background(), in)
 	after, _ := json.Marshal(in)
 	if string(before) != string(after) {
 		t.Fatal("input mutated")
@@ -161,13 +161,13 @@ func TestSerializationNegativeAndPrivacy(t *testing.T) {
 	}
 	// Deliberately do not decode nested Base64.
 	nested := base64.StdEncoding.EncodeToString([]byte(base64.StdEncoding.EncodeToString([]byte{0xac, 0xed, 0, 5})))
-	result, _ = (Serialization{}).Analyze(context.Background(), serialInput([]byte(nested)))
+	result, _ = (Plugin{}).Analyze(context.Background(), serialInput([]byte(nested)))
 	if len(result.Artifacts) != 0 {
 		t.Fatalf("recursive decode: %s", result.Data)
 	}
 }
 func TestSerializationLimitsCancellationAndRegistry(t *testing.T) {
-	p := Serialization{}
+	p := Plugin{}
 	in := serialInput([]byte(strings.Repeat("!", serializationBytes+1)))
 	result, err := p.Analyze(context.Background(), in)
 	if err != nil || !result.Truncated {
@@ -226,7 +226,7 @@ func TestSerializationFormValuesAndGenericErrors(t *testing.T) {
 				in.Request.Header = http.Header{"Content-Type": {"application/x-www-form-urlencoded; charset=UTF-8"}}
 				in.Request.Body = []byte("payload=" + test.value)
 			}
-			result, err := (Serialization{}).Analyze(context.Background(), in)
+			result, err := (Plugin{}).Analyze(context.Background(), in)
 			if err != nil || !serialHas(serialFindings(t, result), test.rule, test.strength, scope, "url") {
 				t.Fatalf("form %t %s: %s %v", query, test.value, result.Data, err)
 			}
@@ -235,13 +235,13 @@ func TestSerializationFormValuesAndGenericErrors(t *testing.T) {
 	for _, message := range []string{"ModuleNotFoundError: No module named 'requests'", "java.lang.ClassNotFoundException: com.mysql.cj.jdbc.Driver"} {
 		in := serialInput(nil)
 		in.Response.Body = []byte(message)
-		result, _ := (Serialization{}).Analyze(context.Background(), in)
+		result, _ := (Plugin{}).Analyze(context.Background(), in)
 		if len(result.Artifacts) != 0 {
 			t.Fatalf("generic error misclassified: %s", result.Data)
 		}
 	}
 	for _, invalid := range []string{"gAQ==", "gAQ===", "gAQ=A", "rO0AB===", "gAR="} {
-		result, _ := (Serialization{}).Analyze(context.Background(), serialInput([]byte(invalid)))
+		result, _ := (Plugin{}).Analyze(context.Background(), serialInput([]byte(invalid)))
 		if len(result.Artifacts) != 0 {
 			t.Fatalf("invalid Base64 %q: %s", invalid, result.Data)
 		}
@@ -262,7 +262,7 @@ func TestSerializationHeaderPreprocessingLimits(t *testing.T) {
 		case "empty-values":
 			in.Request.Header["X-Test"] = make([]string, serializationSurfaces+1)
 		}
-		result, err := (Serialization{}).Analyze(context.Background(), in)
+		result, err := (Plugin{}).Analyze(context.Background(), in)
 		if err != nil || !result.Truncated {
 			t.Fatalf("header limit %s: %+v %v", kind, result, err)
 		}
@@ -281,7 +281,7 @@ func FuzzSerialization(f *testing.F) {
 		f.Add([]byte(seed))
 	}
 	f.Fuzz(func(t *testing.T, body []byte) {
-		result, err := (Serialization{}).Analyze(context.Background(), serialInput(body))
+		result, err := (Plugin{}).Analyze(context.Background(), serialInput(body))
 		if err != nil {
 			t.Fatal(err)
 		}

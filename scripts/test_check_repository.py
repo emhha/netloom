@@ -157,6 +157,16 @@ class RepositoryChecks(unittest.TestCase):
             self.assertTrue(any("obsolete plugin directory: infoextract" in error for error in errors))
             self.assertTrue(any("obsolete infoextract import" in error for error in errors))
 
+    def test_serialization_source_belongs_to_its_plugin_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / "passive/plugins/serialization/serialization.go").write_text("package serialization\n")
+            self.assertEqual(checker.check(root), [])
+            (root / "passive/plugins/serialization_match.go").write_text("package plugins\n")
+            errors = checker.check(root)
+            self.assertTrue(any("place serialization implementation" in error for error in errors))
+
     def test_upstream_excluded_but_maintained_history_and_provenance_checked(self):
         for name in (
             "dirscan/wordlists/dirsearch/README.upstream.md",

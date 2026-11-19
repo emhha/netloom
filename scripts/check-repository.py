@@ -18,6 +18,7 @@ REQUIRED = (
     "examples/README.md", "httpclient/README.md", "mapping/README.md",
     "enterprise/README.md", "httpdata/netloomdata/convert.go",
     "passive/plugins/infoextract/README.md", "passive/plugins/infoextract/plugin.go",
+    "passive/plugins/serialization/README.md", "passive/plugins/serialization/serialization.go",
 )
 
 
@@ -98,6 +99,8 @@ def check(root):
             errors.extend(check_privacy(root, path))
         if path.suffix != ".go":
             continue
+        if path.parent == root / "passive/plugins" and path.name.startswith("serialization"):
+            errors.append(f"{relative}: place serialization implementation in passive/plugins/serialization")
         text = path.read_text(encoding="utf-8")
         imports = []
         for block, single in re.findall(

@@ -1,4 +1,4 @@
-// Package plugins provides built-in passive analysis plugins for technology
-// fingerprinting and serialization hints. The infoextract subpackage provides
-// the built-in plugin for sensitive information candidates.
+// Package plugins provides the technology fingerprinting adapter and aliases
+// for the serialization plugin. The infoextract and serialization subpackages
+// provide their own plugin constructors.
 package plugins

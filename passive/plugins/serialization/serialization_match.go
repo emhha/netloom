@@ -1,4 +1,4 @@
-package plugins
+package serialization
 
 import (
 	"math/bits"

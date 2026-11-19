@@ -297,11 +297,11 @@ EHole/FingerprintHub 的 AC、图标及正则字面量索引在 New 时构建，
 webfinger.go 提供独立 WebfingerMatcher、LoadWebfingerYAML 与 Len（包含仅图标规则的去重技术数），和其他来源保持同类入口结构。Engine 不再持有 webfinger 的 AST/AC/图标内部状态；底层 lexer/parser/ast/compiler 继续独立组织。默认来源开关保持不变。
 信息提取由 `github.com/emhha/netloom/passive/plugins/infoextract` 提供。`infoextract.New()` 返回可直接注册的插件，`AddRule` 添加或替换规则。正文和响应头共用一次分析的规则快照。插件通过公共 `ac` 筛选触发词后执行正则，正文默认按项目、会话、URL、媒体类型和长度去重，匹配过的发现只报告一次。`HashBodyForCache` 可按采集正文哈希识别等长变化。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
 
-`passive/plugins.Serialization` 实现 `passive.Plugin`，零值可用；通过 `passive.New([]passive.Plugin{&plugins.Serialization{}}, cacheLimit)` 显式注册，ID 为 `serialization`、Version 为 `"1"`，不自动启用。它纯离线扫描请求 URL/头/正文和响应头/正文，仅做一层 URL/form 与有界标准/URL-safe Base64 解码，不反序列化、不联网、不解压/解密或跨流关联。每输入固定总扫描 1 MiB、128 个观察面、64 个 findings；超限或输入 Response.BodyTruncated 时标记 Result.Truncated。
+`passive/plugins/serialization.New()` 返回 `passive.Plugin` 实现，`serialization.Plugin` 零值也可用。显式注册时 ID 为 `serialization`、Version 为 `"1"`。它纯离线扫描请求 URL/头/正文和响应头/正文，仅做一层 URL/form 与有界标准/URL-safe Base64 解码，不反序列化、不联网、不解压/解密或跨流关联。每输入固定总扫描 1 MiB、128 个观察面、64 个 findings；超限或输入 Response.BodyTruncated 时标记 Result.Truncated。
 
 Serialization 的文本规则复用公共 `ac` 筛选候选，仅对候选执行相应正则；可证明等价的安全固定字面量规则直接命中，无法安全提取必要触发词的规则保留完整正则 fallback。大小写不敏感的 `rememberMe` 继续使用正则 fallback，避免以 ASCII 大小写预筛选漏掉 Go 正则支持的 Unicode 折叠匹配。二进制 magic 保持前缀检查，不改为任意位置的 AC 命中；URL/Base64 观察流程、上述 1 MiB/128/64 预算、finding 顺序与输出语义不变。
 
-公开 `plugins.SerializationFinding` 包含 Format、Rule、Strength、Scope、Encoding、Evidence 字段；`Result.Data` 为 `{findings: [{format, rule, strength, scope, encoding, evidence}], passive_only: true}` JSON。Serialization.CacheKey 返回空字符串，禁用结果缓存。strength 的 strong/medium/weak 仅表示特征强度，不代表漏洞；响应内容特征降级，错误串仅作响应线索。Artifacts 的 Type 为 `serialization_hint`，Rule/Scope 对应规则和观察位置，Value 仅含格式名及强度；evidence 为有界特征标签，不回显原始敏感值。完整调用示例、解码边界和误判说明见 [内置被动插件](../passive/plugins/README.md)。
+公开 `serialization.Finding` 包含 Format、Rule、Strength、Scope、Encoding、Evidence 字段；`Result.Data` 为 `{findings: [{format, rule, strength, scope, encoding, evidence}], passive_only: true}` JSON。插件的 `CacheKey` 返回空字符串，禁用结果缓存。strength 的 strong/medium/weak 仅表示特征强度，不代表漏洞；响应内容特征降级，错误串仅作响应线索。Artifacts 的 Type 为 `serialization_hint`，Rule/Scope 对应规则和观察位置，Value 仅含格式名及强度；evidence 为有界特征标签，不回显原始敏感值。完整调用示例、解码边界和误判说明见 [序列化格式线索插件](../passive/plugins/serialization/README.md)。
 
 probe.Run 返回结果通道，dirscan.Run 返回结果切片。调用方负责目标授权；无数据库或任务服务。
 

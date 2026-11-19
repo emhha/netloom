@@ -1,4 +1,4 @@
-package plugins
+package serialization
 
 import (
 	"bytes"
@@ -51,7 +51,7 @@ func TestSerializationFrozenTables(t *testing.T) {
 
 func assertSerializationEquivalent(t *testing.T, in passive.Input) passive.Result {
 	t.Helper()
-	got, err := (Serialization{}).Analyze(context.Background(), in)
+	got, err := (Plugin{}).Analyze(context.Background(), in)
 	want, oldErr := (serializationLinear{}).Analyze(context.Background(), in)
 	if err != nil || oldErr != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("pipeline mismatch\ngot=%+v\nwant=%+v\nerrors=%v / %v", got, want, err, oldErr)
@@ -90,7 +90,7 @@ func TestSerializationACSurfacesAndLimits(t *testing.T) {
 		in.Response.Body = []byte(payload)
 		got := assertSerializationEquivalent(t, in)
 		var out struct {
-			Findings []SerializationFinding `json:"findings"`
+			Findings []Finding `json:"findings"`
 		}
 		if err := json.Unmarshal(got.Data, &out); err != nil {
 			t.Fatal(err)
@@ -177,7 +177,7 @@ func TestSerializationACConcurrentAnalyze(t *testing.T) {
 	for worker := 0; worker < 8; worker++ {
 		wg.Go(func() {
 			for i := 0; i < 24; i++ {
-				got, err := (Serialization{}).Analyze(context.Background(), in)
+				got, err := (Plugin{}).Analyze(context.Background(), in)
 				if err != nil || !reflect.DeepEqual(got, want) {
 					t.Errorf("shared matcher pipeline differs: %v", err)
 					return
@@ -202,7 +202,7 @@ func BenchmarkSerializationPipeline(b *testing.B) {
 		case "binary-response":
 			in.Response.Body = append([]byte{0xac, 0xed, 0, 5}, bytes.Repeat([]byte{0, 0xff, 1, 0x80, 0xfe}, 12000)...)
 		}
-		got, err := (Serialization{}).Analyze(context.Background(), in)
+		got, err := (Plugin{}).Analyze(context.Background(), in)
 		want, oldErr := (serializationLinear{}).Analyze(context.Background(), in)
 		if err != nil || oldErr != nil || !reflect.DeepEqual(got, want) {
 			b.Fatalf("%s benchmark fixtures differ: %v / %v", kind, err, oldErr)
@@ -210,7 +210,7 @@ func BenchmarkSerializationPipeline(b *testing.B) {
 		for _, impl := range []struct {
 			name    string
 			analyze func(context.Context, passive.Input) (passive.Result, error)
-		}{{"linear", (serializationLinear{}).Analyze}, {"AC", (Serialization{}).Analyze}} {
+		}{{"linear", (serializationLinear{}).Analyze}, {"AC", (Plugin{}).Analyze}} {
 			b.Run(kind+"/"+impl.name, func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {

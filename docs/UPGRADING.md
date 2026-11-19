@@ -8,6 +8,8 @@
 
 原 `github.com/emhha/netloom/infoextract` 导入路径已移除。请改导入 `github.com/emhha/netloom/passive/plugins/infoextract`，用 `infoextract.New()` 替代 `&plugins.Information{Extractor: infoextract.New()}`，直接把新对象注册到 `passive.Registry`，并在插件上调用 `AddRule`。原 `Extract`、`ExtractWithContentType` 和 `Snapshot` 接口已移除。分析已有正文或响应头时，构造 `passive.Input` 并读 `passive.Result.Artifacts`。`Value` 返回完整匹配。插件 ID `infoextract` 和版本 `"5"` 保持一致。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
 
+序列化插件迁入 `github.com/emhha/netloom/passive/plugins/serialization`。用 `serialization.New()` 构造，用 `serialization.Finding` 读取结果；旧的 `plugins.Serialization` 和 `plugins.SerializationFinding` 是已弃用的源码兼容别名。注册 ID、版本和结果 JSON 保持一致。见 [序列化格式线索插件](../passive/plugins/serialization/README.md)。
+
 统一使用 module `github.com/emhha/netloom`，根包标识符为 `netloom`，子包位于同一 module 下。使用早期裸路径 `netloom` 的代码应更新 module 依赖及导入路径，例如：
 
 ```go
@@ -40,7 +42,7 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 - `Serialization` 的文本规则改用共享 AC 筛选候选，仅候选运行正则，安全固定字面量规则直接命中；无法安全触发的规则保留正则 fallback。大小写不敏感的 `rememberMe` 仍走正则，保留 Unicode 折叠匹配，不能用仅 ASCII 的大小写预筛选替代。magic 仍为前缀检查，URL/Base64 流程、1 MiB/128/64 固定预算与结果/证据语义不变。Registry 不新增强制 AC 策略，既有插件选择、注册和缓存接口不变；共享引擎由各插件自行选择使用。
 
-- 新增公共插件 `passive/plugins.Serialization` 及结果类型 `plugins.SerializationFinding`；插件实现 `passive.Plugin`，零值可用；注册 ID 为 `serialization`、版本为 `"1"`。使用 `passive.New` 显式注册，不改变既有 Registry 的插件选择。它仅对已捕获请求 URL/头/正文和响应头/正文作离线特征扫描与一层有界解码，不反序列化、不联网；固定每输入总扫描 1 MiB、128 个观察面、64 个 findings，超限及 Response.BodyTruncated 传播至 Result.Truncated。Result.Data 新结构为 `{findings: [{format, rule, strength, scope, encoding, evidence}], passive_only: true}`，Artifacts 类型为 `serialization_hint`，仅含格式/强度及规则/位置元信息，不含原始敏感值。strong/medium/weak 是特征强度，不是漏洞结论；完整示例及误判边界见 [内置被动插件](../passive/plugins/README.md)。
+- `serialization.Plugin` 的零值可用，注册 ID 为 `serialization`，版本为 `"1"`。它检查已捕获的请求和响应，只进行有界的格式识别和解码。JSON 结果可用 `serialization.Finding` 读取。完整示例与扫描预算见 [序列化格式线索插件](../passive/plugins/serialization/README.md)。
 
 - `NetworkOptions` 新增 `LocalAddress`（JSON `local_address`）与 `Interface`（`interface`），分别绑定实际 TCP 源 IP 和 Linux 网卡；空值不改变原行为，适用于普通/流式/Raw 直连，与任意代理组合仍明确拒绝。源地址约束目标族，完整规范策略进入池身份；绑定不影响逻辑 URL/Host/SNI，不绑定 DNS resolver、不修改系统配置。新增可用 errors.Is 判断的 `ErrNetworkBindingInvalid`、`ErrNetworkBindingUnsupported`、`ErrNetworkBinding`：前两类在验证阶段返回，后者保留内核原因且不自动重试/降级。Interface 在非 Linux 即验证失败；Linux 可能需要调用方授予 capability。已有连接不因设备变化自动重绑，重新建连须 FreshConnection 或新 Engine；详情见 [绑定指南](NETWORK-BINDING.md)。
 

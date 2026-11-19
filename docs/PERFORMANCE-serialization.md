@@ -5,7 +5,7 @@
 ## 实现与比较边界
 
 - 新实现使用固定版本 Cloudflare ahocorasick，经公共 [ac 薄适配](../ac/README.md) 返回唯一命中词。规则候选使用 bitset、按原规则顺序输出；有限的安全字面量直接匹配，其余候选继续正则复核，无安全触发词的规则始终运行正则。
-- 基线为测试中的[冻结线性实现](../passive/plugins/serialization_linear_test.go)，保留原始逐规则正则及相同的解码、预算和输出逻辑，不为衬托新实现而修改基线算法。[冻结表断言及全管线对照](../passive/plugins/serialization_equivalence_test.go) 检查 regex、属性、magic、预算和完整 Result；性能测量前全仓测试及 race 已通过。
+- 基线为测试中的[冻结线性实现](../passive/plugins/serialization/serialization_linear_test.go)，保留原始逐规则正则及相同的解码、预算和输出逻辑，不为衬托新实现而修改基线算法。[冻结表断言及全管线对照](../passive/plugins/serialization/serialization_equivalence_test.go) 检查 regex、属性、magic、预算和完整 Result；性能测量前全仓测试及 race 已通过。
 - 此处衡量的是“候选筛选＋安全字面量替代”的整体变化，**不能全部归因为 Cloudflare 库本身**。不同第三方 AC 内核的同口径比较见 [AC 选型](AC-SELECTION.md)。fingerprint 内核未改。
 - 构造 matcher、初始化全局规则和构造输入不计入每次扫描计时。完整插件基准直接调用 `Analyze`，包含路由、预处理、解码、去重、JSON 和 Artifacts 生成；不经过 Registry 缓存，也不包含输入抓取、网络或 matcher 构建。
 - 基准串行调用，`-cpu=4` 只设置 GOMAXPROCS；下表是每次调用耗时，不是四路并发摊销时间。性能测量与全仓 race/fuzz 分开运行。
@@ -28,7 +28,7 @@
 
 ## 分层补充：文本匹配与完整分析
 
-[分层基准源码](../passive/plugins/serialization_match_test.go) 另以 `100ms×3` 测量文本匹配和完整 `Analyze`。下面仅用于说明各层差异，不与上表混用样本；短采样中慢场景每次只有少量迭代，时序及正则内部池造成的分配波动较大。
+[分层基准源码](../passive/plugins/serialization/serialization_match_test.go) 另以 `100ms×3` 测量文本匹配和完整 `Analyze`。下面仅用于说明各层差异，不与上表混用样本；短采样中慢场景每次只有少量迭代，时序及正则内部池造成的分配波动较大。
 
 | 场景 | 文本线性 → AC ms/op | 完整分析线性 → AC ms/op |
 | --- | ---: | ---: |
@@ -53,8 +53,8 @@
 ## 复现
 
 ```sh
-go test ./passive/plugins -run '^$' -bench 'BenchmarkSerialization(Text|Analyze|Pipeline)$' -benchmem -benchtime=100ms -count=3 -cpu=4
-go test ./passive/plugins -run '^$' -bench 'BenchmarkSerialization(Analyze|Pipeline)/(64KiB-nohit|64KiB-dense|json-response|form-base64|binary-response)' -benchmem -benchtime=1s -count=3 -cpu=4
+go test ./passive/plugins/serialization -run '^$' -bench 'BenchmarkSerialization(Text|Analyze|Pipeline)$' -benchmem -benchtime=100ms -count=3 -cpu=4
+go test ./passive/plugins/serialization -run '^$' -bench 'BenchmarkSerialization(Analyze|Pipeline)/(64KiB-nohit|64KiB-dense|json-response|form-base64|binary-response)' -benchmem -benchtime=1s -count=3 -cpu=4
 ```
 
 输入生成器、固定 witness 和冻结实现均位于测试源码，不需要下载远程流量。原始输出、中位数及相关源码校验值见 [SHA256SUMS](benchmarks/serialization/SHA256SUMS)；正确性及执行范围见 [验证记录](VALIDATION.md)。
