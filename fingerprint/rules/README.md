@@ -10,7 +10,17 @@
 
 ## 加载
 
-在 Netloom 仓库根目录运行时：
+使用 SDK 随附规则，不需要路径、资源部署或工作目录约定：
+
+```go
+engine, err := fingerprint.NewBuiltin(ctx,
+    fingerprint.SourceEHole, fingerprint.SourceWappalyzer,
+)
+```
+
+省略来源参数时，`NewBuiltin(ctx)` 遵循内置 `sources.json` 的启用开关。显式来源只加载指定 matcher，也可选中默认关闭的 webfinger；未知来源报错。资源嵌入由本库负责，调用方无需复制规则。匹配仍纯离线，不下载或发送探针。
+
+调用方使用自己的规则目录时：
 
 ```go
 engine, err := fingerprint.New(ctx, fingerprint.Config{
@@ -31,7 +41,7 @@ engine, err := fingerprint.New(ctx, fingerprint.Config{
 
 原有 `CustomRulesDir`、`WebfingerYAML`、`WappalyzerJSONPath` 仍可独立显式使用；另新增 `EHoleJSONPath`、`FingerprintHubJSONPath`。这些低层输入不读取 sources.json。`CustomRulesDir` 扫描第一层所有 `.yaml` 并标记 Source=custom，不适用于当前默认多源开关配置。
 
-其他应用部署时把该目录作为资源复制到自己的部署目录，配置实际路径；规则不 embed 到 SDK 二进制。
+`New(ctx, Config{RulesDir: ...})` 保留外部资源加载；`NewBuiltin` 使用 SDK 内嵌资源。内置来源和外部自定义来源通过各自构造入口选择，不隐式合并。
 
 自己的规则可保存在独立目录，以同样的 `CustomRulesDir` 配置加载；如需与上游规则一起使用，把所需 `.yaml` 放到同一个调用方管理的目录。支持的格式：
 

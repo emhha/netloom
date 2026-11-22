@@ -286,7 +286,9 @@ func (*Matcher) Match([]byte, func(index int))
 ```
 
 `ac` 薄适配固定版本的 Cloudflare ahocorasick，共享扫描统一使用上游 `MatchThreadSafe`。`Search` 返回独立的命中关键词集合；`Match` 每次为每个命中唯一词最多回调一次，提供该词在输入中的第一个原始索引，不承诺顺序或出现次数，适合映射到候选规则。空关键词忽略，重复关键词去重。详细字节匹配及回调契约见 [ac 说明](../ac/README.md)。共享的是匹配引擎，不是 Registry 级的统一预筛选：Registry 不强制所有插件使用 AC，各插件自行选择是否复用。
-指纹推荐通过 Config.RulesDir 显式指定规则目录并加载 sources.json，当前禁用 webfinger、启用 EHole/FingerprintHub/Wappalyzer。配置模式对启用文件的缺失、空文件、无效原生格式返回错误；不与逐文件字段混用。
+指纹内置规则使用 `fingerprint.NewBuiltin(ctx)`，按 SDK 随附的 `sources.json` 默认启用 EHole/FingerprintHub/Wappalyzer、禁用 webfinger；也可传入 `SourceEHole`、`SourceWappalyzer` 等来源常量，只编译指定 matcher，无需任何路径。规则由本库内嵌，不搜索用户目录、不读模块缓存、不联网。
+
+自定义规则可通过 Config.RulesDir 显式指定规则目录并加载该目录 sources.json。配置模式对启用文件的缺失、空文件、无效原生格式返回错误；不与逐文件字段混用。
 
 保留 WebfingerYAML、CustomRulesDir、WappalyzerJSONPath，新增 EHoleJSONPath、FingerprintHubJSONPath 作为独立显式输入，不读取 sources.json。旧 YAML/Wappalyzer 输入保持原有缺失文件降级语义；两个新原生 JSON 输入返回加载错误。零值配置不读文件。规则来源与格式细节见 [规则说明](../fingerprint/rules/README.md)。
 

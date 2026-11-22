@@ -72,7 +72,7 @@ HTTP/HTTPS 请求可用 `HTTPVersion: "2"` 表示偏好 H2、允许 H1 降级，
 
 - 根包 TLS 验证须显式设置 `VerifyTLS: true`。`Retries=0` 表示默认重试两次，负数才禁用；不要把不同客户端的默认值混用。
 - 直接拨号拒绝回环、未指定和链路本地地址，允许私网；代理出口策略由代理负责。这不是完整的 SSRF 防护，调用方仍须校验目标授权。
-- [指纹规则](fingerprint/rules/README.md) 和 [目录字典](dirscan/wordlists/README.md) 必须显式配置，不自动读取用户目录或 embed 到二进制。规则匹配只分析已有证据，不主动发送探针。
+- [指纹规则](fingerprint/rules/README.md) 可通过 `fingerprint.NewBuiltin` 使用 SDK 内嵌来源，直接选择 matcher，无需资源路径；外部自定义规则和 [目录字典](dirscan/wordlists/README.md) 仍须显式配置。不自动读取用户目录或下载资源，规则匹配只分析已有证据，不主动发送探针。
 - MITM 不自动监听或安装证书；私钥保管归调用方。[GeoIP](geoip/README.md) 初始化只读指定本地资源，下载须显式提供 URL。
 - 数据源 API 可能收费或受频率限制；凭据、调用权限和付费重试策略由调用方选择，见各包说明。
 

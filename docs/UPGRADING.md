@@ -23,6 +23,8 @@ import "github.com/emhha/netloom/httpdata/netloomdata"
 
 ### 默认值与可见行为
 
+新增 `fingerprint.NewBuiltin(ctx, sources ...Source)`：无来源参数时使用 SDK 内嵌 `sources.json` 的默认开关；指定来源常量时只加载选中来源。可选 `SourceWebfinger`、`SourceEHole`、`SourceFingerprintHub`、`SourceWappalyzer`，不需要规则路径或运行时资源目录。未知来源和编译失败返回错误。现有 `New(ctx, Config)` 继续只处理调用方显式输入，零值配置及自定义路径行为保持不变。
+
 - 修复 HTTPS MITM 复用 CONNECT 隧道时后续请求因上游 context 提前取消而返回 `502` 的问题。MITM 保留接管前已预读的字节，后续直接从隧道读取。
 
 - 信息提取插件版本 `"5"` 默认按项目、会话、URL、媒体类型和长度去重。重复正文或响应头只报告命中，不重发旧的发现；需要识别等长正文变化时可启用 `HashBodyForCache`。`passive.New` 继续返回缓存结果，新增 `passive.NewDeduplicating` 可为有缓存键的插件选择只跳过的行为。见 [信息提取插件](../passive/plugins/infoextract/README.md)。
